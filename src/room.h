@@ -3,7 +3,15 @@
 #include <cstdint>
 #include <cstring>
 
-struct __attribute((packed)) Room
+#ifdef __GNUC__
+#define PACK(a, b) a __attribute__((__packed__)) b
+#define UNPACK
+#else
+#define PACK   __pragma(pack(push, 1));  a b
+#define UNPACK __pragma(pack(pop));
+#endif
+
+PACK(struct, Room)
 {
 	Room()
 	{
@@ -31,5 +39,6 @@ struct __attribute((packed)) Room
 		return !(*this == it);
 	}
 };
+UNPACK
 
 #endif // ROOM_H

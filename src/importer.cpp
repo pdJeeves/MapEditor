@@ -20,12 +20,13 @@ bool ImportS16Frames(QImage & image, FILE * file, uint32_t RGBformat, int width,
 	image = QImage((width*img_width + 255) & 0xFFF0, (height*img_height + 255) & 0xFFF0, QImage::Format_ARGB32);
 	image.fill(0);
 
-	struct __attribute__ ((packed)) image_header
+	PACK(struct, image_header)
 	{
 		uint32_t offset;
 		uint16_t width;
 		uint16_t height;
 	};
+	UNPACK
 
 	std::vector<image_header> headers(length);
 	fread(headers.data(), sizeof(image_header), length, file);
@@ -215,7 +216,7 @@ const static uint8_t PALETTE_DTA[] = {
 		return false;
 	}
 
-	struct __attribute((packed)) spr_header
+	PACK(struct, spr_header)
 	{
 		spr_header() :
 			offset(0),
@@ -238,6 +239,7 @@ const static uint8_t PALETTE_DTA[] = {
 		uint32_t offset;
 		uint16_t width, height;
 	};
+	UNPACK
 
 	std::vector<spr_header> header(length);
 

@@ -11,7 +11,7 @@ class MemoData;
 #define SMOOTHING_X 24
 
 
-struct Verticies
+class Verticies
 {
 private:
 	MemoData * OptimizeLine(std::map<int, MemoData*> & map, const int min, const int max, const int depth);
@@ -40,7 +40,7 @@ public:
 };
 
 
-struct MemoData
+class MemoData
 {
 private:
 	double _error;

@@ -189,12 +189,12 @@ void MainWindow::meld()
 							continue;
 						}
 
-						if(fabs((int) i->top_right - j->top_left) < 4)
+						if(std::abs((int) i->top_right - j->top_left) < 4)
 						{
 							i->top_right = j->top_left = (i->top_right + j->top_left) / 2;
 						}
 
-						if(fabs((int) i->bottom_right - j->bottom_left) < 4)
+						if(std::abs((int) i->bottom_right - j->bottom_left) < 4)
 						{
 							i->bottom_right = j->bottom_left = (i->bottom_right + j->bottom_left) / 2;
 						}
@@ -209,12 +209,12 @@ void MainWindow::meld()
 							continue;
 						}
 
-						if(fabs((int) i->top_right - j->top_left) < 4)
+						if(std::abs((int) i->top_right - j->top_left) < 4)
 						{
 							i->top_right = j->top_left = (i->top_right + j->top_left) / 2;
 						}
 
-						if(fabs((int) i->bottom_right - j->bottom_left) < 4)
+						if(std::abs((int) i->bottom_right - j->bottom_left) < 4)
 						{
 							i->bottom_right = j->bottom_left = (i->bottom_right + j->bottom_left) / 2;
 						}
@@ -417,7 +417,7 @@ void MainWindow::onMouseRelease(QPoint pos, QSize size)
 
 		int i = x*tiles().height() + y;
 
-		if(i > rooms.size())
+		if(i > (int) rooms.size())
 		{
 			return;
 		}

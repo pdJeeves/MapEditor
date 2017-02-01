@@ -1,7 +1,13 @@
 #include "verticies.h"
 
+#ifdef __GNUC__
+#define PURE __attribute((pure))
+#else
+#define PURE
+#endif
+
 static
-double __attribute((pure)) getError(const uint16_t * heights, int min, int max)
+double PURE getError(const uint16_t * heights, int min, int max)
 {
 	double m = (heights[max] - heights[min])  / (double) (max - min);
 	double b = heights[min] - m * min;
@@ -25,7 +31,7 @@ double __attribute((pure)) getError(const uint16_t * heights, int min, int max)
 }
 
 static
-double __attribute((pure)) getArea(const uint16_t * above, uint16_t * below, int min, int max)
+double PURE getArea(const uint16_t * above, uint16_t * below, int min, int max)
 {
 	double m1 = (above[max] - above[min])  / (double) (max - min);
 	double b1 = above[min] - m1 * min;

@@ -28,8 +28,9 @@ public:
 	void rollForward(MainWindow * window) override;
 };
 
-struct RemoveRoomCommand : public AddRoomCommand
+class RemoveRoomCommand : public AddRoomCommand
 {
+public:
 typedef AddRoomCommand super;
 	RemoveRoomCommand(int i, const Room & room) :
 		super(i, room)
@@ -39,8 +40,9 @@ typedef AddRoomCommand super;
 	void rollBack(MainWindow * window)    override { super::rollForward(window); }
 };
 
-struct AggregateCommand : public CommandInterface, public std::list<std::unique_ptr<CommandInterface> >
+class AggregateCommand : public CommandInterface, public std::list<std::unique_ptr<CommandInterface> >
 {
+public:
 	void initialize(MainWindow * window) override;
 	void rollForward(MainWindow * window) override;
 	void rollBack(MainWindow * window)    override;
