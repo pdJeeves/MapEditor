@@ -192,9 +192,21 @@ void MainWindow::actionImportRooms()
 		}
 	}
 
+	progress = new QProgressDialog(tr("Processing Image..."), "Cancel", 0, totalTiles(), this);
+
 	room_map = new QImage(std::move(image.convertToFormat(QImage::Format_Indexed8, palette16, Qt::ThresholdDither)));
 
-	progress = new QProgressDialog(tr("Processing Image..."), "Cancel", 0, totalTiles(), this);
+	for(int y = 0; y < image.height(); ++y)
+	{
+		for(int x = 0; x < image.width(); ++x)
+		{
+			if(qAlpha(image.pixel(x, y)) < 200)
+			{
+				room_map->setPixel(x, y, 0);
+			}
+		}
+	}
+
 	WorkerThread::i = 0;
 	WorkerThread::canceled = false;
 	connect(progress, &QProgressDialog::canceled, this, [this](){ WorkerThread::canceled = true; });

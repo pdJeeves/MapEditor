@@ -52,6 +52,11 @@ std::list<Verticies> GenerateEdges(const QImage & image)
 
 			uint16_t _y = get_bottom_of_run(image, color, x, y);			
 
+			if(_y == y)
+			{
+				continue;
+			}
+
 			auto best = vertex_data.end();
 			int overlap = 0;
 
