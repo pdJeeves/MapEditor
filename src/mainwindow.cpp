@@ -20,28 +20,24 @@ QVector<QRgb> MainWindow::palette332;
 
 QRgb MainWindow::palette[16] = {
 	0x00000000,
-	0xFF000000,
-//white
-	0xFFD7D7D7,
 	0xFFFFFFFF,
-//red
-	0xFFD70000,
+	0xFFAAAAAA,
+	0xFF555555,
+
+	0xFF000000,
 	0xFFFF0000,
-//yellow
-	0xFFFFFF00,
-	0xFFD7D700,
-//green
-	0xFF00D700,
+	0xFFAA0000,
+	0xFFFF5500,
+
+	0xFFFFAA00,
+	0xFFAAFF00,
 	0xFF00FF00,
-//cyan
-	0xFF00FFFF,
-	0xFF00D7D7,
-//blue
-	0xFF0000D7,
+	0xFF00AA00,
+
+	0xFF00AAFF,
 	0xFF0000FF,
-//violet
-	0xFFFF00FF,
-	0xFFD700D7,
+	0xFFAA00FF,
+	0xFFFF00FF
 };
 
 std::ostream & operator<<(std::ostream & o, const QPoint & point)

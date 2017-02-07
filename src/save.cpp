@@ -159,7 +159,7 @@ void MainWindow::documentSave()
 		return;
 	}
 
-	FILE * file = fopen(filepath.toStdString().c_str(), "w");
+	FILE * file = fopen(filepath.toStdString().c_str(), "wb");
 	if(!file)
 	{
 		QMessageBox mesg;

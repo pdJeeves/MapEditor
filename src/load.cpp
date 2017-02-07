@@ -250,7 +250,7 @@ void MainWindow::documentOpen()
 		return;
 	}
 
-	FILE * file = fopen(name.toStdString().c_str(), "r");
+	FILE * file = fopen(name.toStdString().c_str(), "rb");
 	if(!file)
 	{
 		QMessageBox mesg;
