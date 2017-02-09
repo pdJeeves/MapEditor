@@ -7,6 +7,9 @@
 #include <QFileInfo>
 #include "byteswap.h"
 
+
+QImage double_image(QImage image);
+
 bool ImportS16Frames(QImage & image, FILE * file, uint32_t RGBformat, int width, int height, int length, int img_width, int img_height)
 {
 	if(RGBformat > 1
@@ -87,6 +90,8 @@ bool ImportS16Frames(QImage & image, FILE * file, uint32_t RGBformat, int width,
 			}
 		}
 	}
+
+	image = std::move(double_image(image));
 
 	return true;
 }
@@ -273,13 +278,15 @@ const static uint8_t PALETTE_DTA[] = {
 		}
 	}
 
+	image = std::move(double_image(image));
+
 	fclose(file);
 	return true;
 }
 
 void MainWindow::documentImportSpr()
 {
-	if(!dimensionCheck(QSize(58*144, 8*150)))
+	if(!dimensionCheck(QSize((58*144)*2, (8*150)*2)))
 	{
 		return;
 	}
@@ -297,7 +304,7 @@ void MainWindow::documentImportSpr()
 	if(dimensions == QSize(-1, -1))
 	{
 		filename = QFileInfo(name).fileName();
-		dimensions = QSize(58*144, 8*150);
+		dimensions = QSize((58*144)*2, (8*150)*2);
 		rooms.clear();
 		rooms.resize(totalTiles());
 	}
@@ -325,7 +332,7 @@ void MainWindow::documentImportS16()
 	if(dimensions == QSize(-1, -1))
 	{
 		filename = QFileInfo(name).fileName();
-		dimensions = QSize(58*144, 16*150);
+		dimensions = QSize((58*144)*2, (16*150)*2);
 		rooms.clear();
 		rooms.resize(totalTiles());
 	}

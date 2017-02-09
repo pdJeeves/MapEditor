@@ -86,6 +86,9 @@
     <addaction name="actionSave"/>
     <addaction name="actionSave_As"/>
     <addaction name="separator"/>
+    <addaction name="actionImport_Parallax_Layer"/>
+    <addaction name="actionExport_Parallax_Layer"/>
+    <addaction name="separator"/>
     <addaction name="actionImport_Spr"/>
     <addaction name="actionImport_s16"/>
     <addaction name="actionImport_Blk"/>
@@ -358,7 +361,7 @@
   </action>
   <action name="actionBackgroundBumpMap">
    <property name="text">
-    <string>Normal Map</string>
+    <string>Bump Map</string>
    </property>
   </action>
   <action name="actionBackgroundEffectMap">
@@ -549,6 +552,16 @@
   <action name="actionRemove_Thin_Rooms">
    <property name="text">
     <string>Remove Thin Rooms</string>
+   </property>
+  </action>
+  <action name="actionExport_Parallax_Layer">
+   <property name="text">
+    <string>Export Parallax Layer</string>
+   </property>
+  </action>
+  <action name="actionImport_Parallax_Layer">
+   <property name="text">
+    <string>Import Parallax Layer</string>
    </property>
   </action>
  </widget>

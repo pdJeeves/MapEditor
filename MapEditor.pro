@@ -23,7 +23,9 @@ SOURCES += main.cpp \
     src/verticies.cpp \
     src/load.cpp \
     src/commandlist.cpp \
-    src/workerthread.cpp
+    src/workerthread.cpp \
+    src/super_xbr.cpp \
+    src/scaleimages.cpp
 
 HEADERS  += mainwindow.h \
     src/mainwindow.h \

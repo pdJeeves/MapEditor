@@ -97,6 +97,7 @@ top:
 	}
 
 	ret_image = std::move(image);
+	ui->actionExport_Parallax_Layer->setEnabled(false);
 	return true;
 }
 
@@ -222,6 +223,8 @@ void MainWindow::actionImportRooms()
 		connect(workerThread, &WorkerThread::work_finished, this, [this](){ui->actionImportRooms->setEnabled(true); delete progress; delete room_map; });
 		workerThread->start();
 	}
+
+	ui->actionExport_Parallax_Layer->setEnabled(false);
 }
 
 QRgb readColor(FILE * file, int index)
@@ -253,23 +256,45 @@ QRgb readColor(FILE * file, int index)
 	}
 }
 
+
 void MainWindow::documentOpen()
 {
-	QString name = QFileDialog::getOpenFileName(this, tr("Open Freetures Background"), QString(), tr("Freetures Background (*.bak)"));
+	QString name;
 
-	if(name.isEmpty())
-	{
-		return;
-	}
+	do {
+		name = QFileDialog::getOpenFileName(this, tr("Open Kreatures Background"), QString(), tr("Kreatures Background (*.bak)"));
 
-	FILE * file = fopen(name.toStdString().c_str(), "rb");
+		if(name.isEmpty())
+		{
+			return;
+		}
+	} while(!openKreaturesFile(name.toStdString(), 13));
+}
+
+void MainWindow::openParallaxLayer()
+{
+	QString name;
+
+	do {
+		name = QFileDialog::getOpenFileName(this, tr("Open Kreatures Parallax Layer"), QString(), tr("Kreatures Parallax Layer (*.plx)"));
+
+		if(name.isEmpty())
+		{
+			return;
+		}
+	} while(!openKreaturesFile(name.toStdString(), 4));
+}
+
+
+bool MainWindow::openKreaturesFile(std::string name, int read_length)
+{
+	FILE * file = fopen(name.c_str(), "rb");
 	if(!file)
 	{
 		QMessageBox mesg;
 		mesg.setText(QObject::tr("Unable to open file '%1' for reading.").arg(filename));
 		mesg.exec();
-		documentOpen();
-		return;
+		return false;
 	}
 
 	int _one;
@@ -279,28 +304,30 @@ void MainWindow::documentOpen()
 	{
 		fclose(file);
 		QMessageBox mesg;
-		mesg.setText(QObject::tr("File is not a freetures background file."));
+		mesg.setText(QObject::tr("File is not a Kreatures background file."));
 		mesg.exec();
 		documentOpen();
-		return;
+		return false;
 	}
 
 	uint16_t width, height;
+	uint32_t image_offsets[13];
+
 	fread(&width, 2, 1, file);
 	fread(&height, 2, 1, file);
+	memset(image_offsets, 0, 4*13);
+	fread(image_offsets, 4, read_length, file);
 
 	width = byte_swap(width);
 	height = byte_swap(height);
 
 	dimensions = QSize(width, height);
-	filepath = name;
+	filepath = name.c_str();
 	filename = QFileInfo(filepath).fileName();
 
 	int tiles_x = (width  + 255) / 256;
 	int tiles_y = (height + 255) / 256;
 
-	uint32_t image_offsets[13];
-	fread(image_offsets, 1, sizeof(image_offsets), file);
 	std::vector<uint32_t> tile_offsets(tiles_x*tiles_y);
 
 	for(int map = 0; map < 3; ++map)
@@ -357,28 +384,33 @@ void MainWindow::documentOpen()
 		}
 	}
 
-	fseek(file, byte_swap(image_offsets[12]), SEEK_SET);
-	rooms.clear();
-	rooms.resize(totalTiles());
-
-	for(auto i = 0; i < totalTiles(); ++i)
+	if(image_offsets[12])
 	{
-		uint8_t length;
-		fread(&length, 1, 1, file);
+		fseek(file, byte_swap(image_offsets[12]), SEEK_SET);
+		rooms.clear();
+		rooms.resize(totalTiles());
 
-		if(length == 0)
+		for(auto i = 0; i < totalTiles(); ++i)
 		{
-			continue;
-		}
+			uint8_t length;
+			fread(&length, 1, 1, file);
 
-		for(int j = 0; j < length; ++j)
-		{
-			Room room;
-			fread(&room, sizeof(Room), 1, file);
-			rooms[i].push_back(room);
+			if(length == 0)
+			{
+				continue;
+			}
+
+			for(int j = 0; j < length; ++j)
+			{
+				Room room;
+				fread(&room, sizeof(Room), 1, file);
+				rooms[i].push_back(room);
+			}
 		}
 	}
 
 	fclose(file);
 	ui->widget->repaint();
+
+	return true;
 }

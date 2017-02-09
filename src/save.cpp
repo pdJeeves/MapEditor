@@ -151,6 +151,89 @@ uint32_t MainWindow::writeTile(FILE * file, int x0, int y0, int map, int channel
 	return r;
 }
 
+
+void MainWindow::saveParallaxLayer()
+{
+top:
+	QString name = QFileDialog::getSaveFileName(this, tr("Export Parallax Layer"), QString(), tr("Kreatures Parallax Layer (*.plx)"));
+
+	if(name.isEmpty())
+	{
+		return;
+	}
+
+	FILE * file = fopen(name.toStdString().c_str(), "wb");
+	if(!file)
+	{
+		QMessageBox mesg;
+		mesg.setText(QObject::tr("Unable to open file '%1' for writing.").arg(filename));
+		mesg.exec();
+		goto top;
+		return;
+	}
+
+	uint32_t one = byte_swap((uint32_t) 1);
+	fwrite(&one, 4, 1, file);
+	uint16_t width  = byte_swap((uint16_t) dimensions.width());
+	uint16_t height = byte_swap((uint16_t) dimensions.height());
+	fwrite(&width, 2, 1, file);
+	fwrite(&height, 2, 1, file);
+
+const static int header_offset = 8;
+//seek to where we can start writing rooms
+
+	uint32_t image_offsets[4];
+	fseek(file, sizeof(image_offsets), SEEK_CUR);
+	std::vector<uint32_t> offsets(totalTiles());
+
+	for(auto j = 0; j < 4; ++j)
+	{
+		if(background[0][j].isNull())
+		{
+			image_offsets[j] = 0;
+			continue;
+		}
+
+		int tiles_written = 0;
+
+		image_offsets[j] = byte_swap((uint32_t) ftell(file));
+
+		fpos_t offset_pos;
+		fgetpos(file, &offset_pos);
+		fseek(file, offsets.size() * 4, SEEK_CUR);
+
+		for(int x = 0; x < tiles().width(); ++x)
+		{
+			for(int y = 0; y < tiles().height(); ++y)
+			{
+				offsets[x*tiles().height() + y] = writeTile(file, x << 8, y << 8, 0, j);
+				if(offsets[x*tiles().height() + y])
+				{
+					++tiles_written;
+				}
+			}
+		}
+
+		fpos_t tile_pos;
+		fgetpos(file, &tile_pos);
+		fsetpos(file, &offset_pos);
+
+		if(tiles_written == 0)
+		{
+			image_offsets[j] = 0;
+			continue;
+		}
+
+		fwrite(offsets.data(), 4, offsets.size(), file);
+		fsetpos(file, &tile_pos);
+	}
+
+	fseek(file, header_offset, SEEK_SET);
+	fwrite(image_offsets, 1, sizeof(image_offsets), file);
+
+	fclose(file);
+}
+
 void MainWindow::documentSave()
 {
 	if(filepath.isEmpty())

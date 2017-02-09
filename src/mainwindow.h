@@ -38,6 +38,7 @@ typedef QMainWindow super;
 	static QVector<QRgb> palette332;
 	static QRgb palette[16];
 
+
 public:
 	std::list<std::pair<int, Room *> > selectedRooms;
 	CommandList commandList;
@@ -70,12 +71,17 @@ public:
 
 	bool event(QEvent * event) override;
 
-public slots:
+private:
+	bool openKreaturesFile(std::string name, int read_length);
+
 	void documentNew();
 	void documentOpen();
 	void documentClose();
 	void documentSave();
 	void documentSaveAs();
+
+	void openParallaxLayer();
+	void saveParallaxLayer();
 
 	void documentImportSpr();
 	void documentImportS16();
@@ -93,7 +99,6 @@ public slots:
 	void removeThinRooms();
 	void meld();
 	void removeHidden();
-
 
 //accessors
 	bool selectMode();

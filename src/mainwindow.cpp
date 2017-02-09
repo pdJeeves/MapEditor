@@ -81,6 +81,9 @@ ui(new Ui::MainWindow)
 	connect(ui->actionSave, &QAction::triggered, this, &MainWindow::documentSave);
 	connect(ui->actionSave_As, &QAction::triggered, this, &MainWindow::documentSaveAs);
 
+	connect(ui->actionImport_Parallax_Layer, &QAction::triggered, this, &MainWindow::openParallaxLayer );
+	connect(ui->actionExport_Parallax_Layer, &QAction::triggered, this, &MainWindow::saveParallaxLayer );
+
 	connect(ui->actionImport_Spr, &QAction::triggered, this, &MainWindow::documentImportSpr );
 	connect(ui->actionImport_s16, &QAction::triggered, this, &MainWindow::documentImportS16);
 	connect(ui->actionImport_Blk, &QAction::triggered, this, &MainWindow::documentImportBlk);
