@@ -163,6 +163,11 @@ uint8_t scanAlpha(const QImage & image, const uint16_t x, const uint16_t y)
 	uint8_t min = 255;
 	uint8_t max = 0;
 
+	if(qAlpha(image.pixel(x, y)) == qAlpha(image.pixel(x+3, y+3)))
+	{
+		return 1;
+	}
+
 	for(uint16_t _y = y; _y < y+4; ++_y)
 	{
 		for(uint16_t _x = x; _x < x+4; ++_x)
@@ -251,11 +256,11 @@ uint32_t MainWindow::writeTile(FILE * file, int x0, int y0, int map, int channel
 	uint16_t compression_3 = 0;
 	uint16_t compression_5 = 0;
 
-	for(int y = 0; y < image.height(); y += 4)
+	for(int y = 0; y < background[map][channel].height(); y += 4)
 	{
-		for(int x = 0; x < image.width(); x += 4)
+		for(int x = 0; x < background[map][channel].width(); x += 4)
 		{
-			switch(scanAlpha(image, x, y))
+			switch(scanAlpha(background[map][channel], x, y))
 			{
 			case 1:
 				++compression_1;
@@ -272,19 +277,22 @@ uint32_t MainWindow::writeTile(FILE * file, int x0, int y0, int map, int channel
 
 	uint8_t compression_type = 1;
 
-	if(compression_3 > 8 && compression_3 > compression_5)
+	if(compression_1 < (compression_3+compression_5)/8)
 	{
-		compression_type = 3;
-	}
-	else if(compression_5 > 8 && compression_5 >= sqrt(compression_3)/2)
-	{
-		compression_type = 5;
+		if(compression_3 > 8 && compression_3 > compression_5)
+		{
+			compression_type = 3;
+		}
+		else if(compression_5 > 8 && compression_5 >= sqrt(compression_3)/2)
+		{
+			compression_type = 5;
+		}
 	}
 
 	uint32_t r = byte_swap((uint32_t) ftell(file));
 	std::vector<uint32_t> uncompressed_image(65536, 0);
 
-	for(; i < 0x10000; ++i)
+	for(uint32_t i = 0; i < 0x10000; ++i)
 	{
 		int x = (i & 0xFF);
 		int y = (i >> 8);
@@ -297,13 +305,10 @@ uint32_t MainWindow::writeTile(FILE * file, int x0, int y0, int map, int channel
 
 		if(channel >= 2)
 		{
-			uncompressed_image[i] = (uint32_t) packBytes(0, qGreen(c), 0, qRed(c));
-			continue;
+			c = (uint32_t) qRgba(qGreen(c),0 ,qRed(c), 0);
 		}
 
 		uncompressed_image[i] = (uint32_t) packBytes(qRed(c), qGreen(c), qBlue(c), qAlpha(c));
-
-		compression_type = scanAlpha(background[map][channel], x+x0, y+y0, compression_type);
 	}
 
 	if(compression_type == 1)
