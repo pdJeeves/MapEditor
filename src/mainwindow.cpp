@@ -70,10 +70,11 @@ ui(new Ui::MainWindow)
 	toolGroup.addAction(ui->actionAdd);
 	toolGroup.addAction(ui->actionSelect);
 
-	viewGroup.addAction(ui->actionShow_Color_Map);
-	viewGroup.addAction(ui->actionShow_Bump_Map);
-	viewGroup.addAction(ui->actionShow_Effect_Map);
 	viewGroup.addAction(ui->actionShow_Baked_Map);
+	viewGroup.addAction(ui->actionShow_Albedo_Map);
+	viewGroup.addAction(ui->actionShow_Normal_Map);
+	viewGroup.addAction(ui->actionShow_Microsurface_Map);
+	viewGroup.addAction(ui->actionShow_Reflectivity_Map);
 
 	connect(ui->actionNew, &QAction::triggered, this, &MainWindow::documentNew);
 	connect(ui->actionOpen, &QAction::triggered, this, &MainWindow::documentOpen);
@@ -104,28 +105,38 @@ ui(new Ui::MainWindow)
 	connect(ui->actionShow_Foreground, &QAction::triggered, [this]() { ui->widget->repaint(); });
 	connect(ui->actionShow_Cutouts, &QAction::triggered, [this]() { ui->widget->repaint(); });
 
-	connect(ui->actionShow_Color_Map, &QAction::triggered, [this]() { ui->widget->repaint(); });
-	connect(ui->actionShow_Bump_Map, &QAction::triggered, [this]() { ui->widget->repaint(); });
-	connect(ui->actionShow_Effect_Map, &QAction::triggered, [this]() { ui->widget->repaint(); });
 	connect(ui->actionShow_Baked_Map, &QAction::triggered, [this]() { ui->widget->repaint(); });
+	connect(ui->actionShow_Albedo_Map, &QAction::triggered, [this]() { ui->widget->repaint(); });
+	connect(ui->actionShow_Normal_Map, &QAction::triggered, [this]() { ui->widget->repaint(); });
+	connect(ui->actionShow_Microsurface_Map, &QAction::triggered, [this]() { ui->widget->repaint(); });
+	connect(ui->actionShow_Reflectivity_Map, &QAction::triggered, [this]() { ui->widget->repaint(); });
 
-	connect(ui->actionBackgroundColorMap, &QAction::triggered, [this]() { replaceImage(background[0][0], 0); });
-	connect(ui->actionBackgroundBumpMap, &QAction::triggered, [this]() { replaceImage(background[0][1], 1); });
-	connect(ui->actionBackgroundEffectMap, &QAction::triggered, [this]() { replaceImage(background[0][2], 2); });
-	connect(ui->actionBackgroundBakedMap, &QAction::triggered, [this]() { replaceImage(background[0][3], 3); });
+	connect(ui->actionBackgroundBakedMap, &QAction::triggered, [this]() { replaceImage(background[0][0]); });
+	connect(ui->actionBackgroundAlbedoMap, &QAction::triggered, [this]() { replaceImage(background[0][1]); });
+	connect(ui->actionBackgroundNormalMap, &QAction::triggered, [this]() { replaceImage(background[0][2]); });
+	connect(ui->actionBackgroundMicrosurfaceMap, &QAction::triggered, [this]() { replaceImage(background[0][3]); });
+	connect(ui->actionBackgroundReflectivityMap, &QAction::triggered, [this]() { replaceImage(background[0][4]); });
 
-	connect(ui->actionForegroundColorMap, &QAction::triggered, [this]() { replaceImage(background[1][0], 0); });
-	connect(ui->actionForegroundBumpMap, &QAction::triggered, [this]() { replaceImage(background[1][1], 1); });
-	connect(ui->actionForegroundEffectMap, &QAction::triggered, [this]() { replaceImage(background[1][2], 2); });
-	connect(ui->actionForegroundBakedMap, &QAction::triggered, [this]() { replaceImage(background[1][3], 3); });
+	connect(ui->actionForegroundBakedMap, &QAction::triggered, [this]() { replaceImage(background[1][0]); });
+	connect(ui->actionForegroundAlbedoMap, &QAction::triggered, [this]() { replaceImage(background[1][1]); });
+	connect(ui->actionForegroundNormalMap, &QAction::triggered, [this]() { replaceImage(background[1][2]); });
+	connect(ui->actionForegroundMicrosurfaceMap, &QAction::triggered, [this]() { replaceImage(background[1][3]); });
+	connect(ui->actionForegroundReflectivityMap, &QAction::triggered, [this]() { replaceImage(background[1][4]); });
+
+	connect(ui->actionCutoutsBakedMap, &QAction::triggered, [this]() { replaceImage(background[2][0]); });
+	connect(ui->actionCutoutsAlbedoMap, &QAction::triggered, [this]() { replaceImage(background[2][1]); });
+	connect(ui->actionCutoutsNormalMap, &QAction::triggered, [this]() { replaceImage(background[2][2]); });
+	connect(ui->actionCutoutsMicrosurfaceMap, &QAction::triggered, [this]() { replaceImage(background[2][3]); });
+	connect(ui->actionCutoutsReflectivityMap, &QAction::triggered, [this]() { replaceImage(background[2][4]); });
 
 	connect(ui->actionAdd, &QAction::triggered, [this]() { selectedRooms.clear();; });
 	connect(ui->actionSelect, &QAction::triggered, [this]() { state = 0; });
 	connect(ui->actionMeld, &QAction::triggered, this, &MainWindow::meld);
 	connect(ui->actionRemove_Thin_Rooms, &QAction::triggered, this, &MainWindow::removeThinRooms);
 
-	connect(ui->actionCutouts, &QAction::triggered, [this]() { replaceImage(background[2][3], 3); });
-	connect(ui->actionImportRooms, &QAction::triggered, this, &MainWindow::actionImportRooms);
+	connect(ui->actionImportRooms, &QAction::triggered, this, [this]() { actionImportRooms(true); } );
+
+	connect(ui->actionAdd_Fluid_Map, &QAction::triggered, this, [this]() { actionImportRooms(false); } );
 
 	connect(ui->actionZoom_Out, &QAction::triggered, [this]() { zoom *= .8; ui->widget->repaint(); });
 	connect(ui->actionZoom_In, &QAction::triggered, [this]() { zoom  *= 1/.8;  ui->widget->repaint(); });
@@ -744,6 +755,36 @@ void MainWindow::draw(QPainter & painter, QPoint pos, QSize size)
 		}
 	}
 
+	for(uint16_t i = 0; i < fluids.size(); ++i)
+	{
+		int x = i / tiles().height() * 256;
+		int y = i % tiles().height() * 256;
+
+		if(x + 256 < offset.x() || y + 256 < offset.y()
+		|| x > offset.x() + size.width() || y > offset.y() + size.height())
+		{
+			continue;
+		}
+
+		QPoint points[4];
+		QPoint pos(x, y);
+		pos -= offset;
+
+		for(auto j = fluids[i].begin(); j != fluids[i].end(); ++j)
+		{
+			if(j->room_type)
+			{
+				painter.setPen(QPen(QBrush(palette[j->room_type-1]), 1, Qt::DashLine));
+			}
+
+			points[0] = pos + QPoint(j->left, j->top_left);
+			points[1] = pos + QPoint(j->left, j->bottom_left);
+			points[2] = pos + QPoint(j->right, j->bottom_right);
+			points[3] = pos + QPoint(j->right, j->top_right);
+			painter.drawPolygon(points, 4);
+		}
+	}
+
 	if(state != 0 && ui->actionAdd->isChecked())
 	{
 		QPoint points[4];
@@ -817,20 +858,24 @@ bool MainWindow::showBackground(int i)
 
 int MainWindow::showMapping()
 {
-	if(ui->actionShow_Color_Map->isChecked())
+	if(ui->actionShow_Baked_Map->isChecked())
 	{
 		return 0;
 	}
-	else if(ui->actionShow_Bump_Map->isChecked())
+	else if(ui->actionShow_Albedo_Map->isChecked())
 	{
 		return 1;
 	}
-	else if(ui->actionShow_Effect_Map->isChecked())
+	else if(ui->actionShow_Normal_Map->isChecked())
 	{
 		return 2;
 	}
+	else if(ui->actionShow_Microsurface_Map->isChecked())
+	{
+		return 3;
+	}
 
-	return 3;
+	return 4;
 }
 
 

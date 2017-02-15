@@ -8,7 +8,8 @@ QT       += core gui
 
 INCLUDEPATH += src
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
-
+INCLUDEPATH += /home/anyuser/Downloads/squish-1.11/
+LIBS += -L/home/anyuser/Downloads/squish-1.11/ -lsquish
 TARGET = MapEditor
 TEMPLATE = app
 

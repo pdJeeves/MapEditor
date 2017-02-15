@@ -91,7 +91,7 @@ bool ImportS16Frames(QImage & image, FILE * file, uint32_t RGBformat, int width,
 		}
 	}
 
-	image = std::move(double_image(image));
+//	image = std::move(double_image(image));
 
 	return true;
 }
@@ -278,7 +278,7 @@ const static uint8_t PALETTE_DTA[] = {
 		}
 	}
 
-	image = std::move(double_image(image));
+//	image = std::move(double_image(image));
 
 	fclose(file);
 	return true;
@@ -299,14 +299,14 @@ void MainWindow::documentImportSpr()
 		{
 			return;
 		}
-	} while(!importSpr(background[0][3], name.toStdString().c_str()));
+	} while(!importSpr(background[0][0], name.toStdString().c_str()));
 
 	if(dimensions == QSize(-1, -1))
 	{
 		filename = QFileInfo(name).fileName();
 		dimensions = QSize((58*144)*2, (8*150)*2);
-		rooms.clear();
-		rooms.resize(totalTiles());
+		fluids.clear();
+		fluids.resize(totalTiles());
 	}
 
 	ui->widget->repaint();
@@ -314,7 +314,7 @@ void MainWindow::documentImportSpr()
 
 void MainWindow::documentImportS16()
 {
-	if(!dimensionCheck(QSize(58*144, 16*150)))
+	if(!dimensionCheck(QSize(58*144*2, 16*150*2)))
 	{
 		return;
 	}
@@ -327,14 +327,14 @@ void MainWindow::documentImportS16()
 		{
 			return;
 		}
-	} while(!importS16(background[0][3], name.toStdString().c_str()));
+	} while(!importS16(background[0][0], name.toStdString().c_str()));
 
 	if(dimensions == QSize(-1, -1))
 	{
 		filename = QFileInfo(name).fileName();
-		dimensions = QSize((58*144)*2, (16*150)*2);
-		rooms.clear();
-		rooms.resize(totalTiles());
+		dimensions = QSize(58*144, 16*150);
+		fluids.clear();
+		fluids.resize(totalTiles());
 	}
 
 	ui->widget->repaint();
@@ -372,7 +372,7 @@ void MainWindow::documentImportBlk()
 
 		if(dimensionCheck(QSize(width, height)))
 		{
-			background[0][3] = std::move(image);
+			background[0][0] = std::move(image);
 
 			if(dimensions == QSize(-1, -1))
 			{
@@ -380,6 +380,8 @@ void MainWindow::documentImportBlk()
 				dimensions = QSize(width, height);
 				rooms.clear();
 				rooms.resize(totalTiles());
+				fluids.clear();
+				fluids.resize(totalTiles());
 			}
 
 			ui->widget->repaint();

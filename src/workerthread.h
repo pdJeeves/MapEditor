@@ -12,12 +12,13 @@ class WorkerThread : public QThread
 
 	MainWindow & main_window;
 	QImage & image;
+	bool type;
 
 public:
 	static int i;
 	static bool canceled;
 
-	WorkerThread(MainWindow & main_window, QImage & image);
+	WorkerThread(MainWindow & main_window, QImage & image, bool type);
 
 	void run() override;
 

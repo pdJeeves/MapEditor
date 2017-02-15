@@ -15,6 +15,8 @@
 #include <QProgressDialog>
 #include "roomsfromimage.h"
 #include "workerthread.h"
+#include <squish.h>
+#include <QProgressBar>
 
 
 static void initializeImageFileDialog(QFileDialog &dialog, QFileDialog::AcceptMode acceptMode)
@@ -83,6 +85,16 @@ top:
 
 		rooms.clear();
 		rooms.resize(totalTiles());
+
+		fluids.clear();
+		fluids.resize(totalTiles());
+	}
+
+	if(newImage.size().width() % 256 == 0
+	&& newImage.size().height() % 256 == 0)
+	{
+		ret_image = std::move(newImage);
+		return true;
 	}
 
 	QImage image((newImage.size().width() + 255) & 0xFF00, (newImage.size().height() + 255) & 0xFF00, QImage::Format_ARGB32);
@@ -97,83 +109,20 @@ top:
 	}
 
 	ret_image = std::move(image);
-	ui->actionExport_Parallax_Layer->setEnabled(false);
 	return true;
 }
 
-void MainWindow::replaceImage(QImage & image, int channel)
+void MainWindow::replaceImage(QImage & image)
 {
 	QImage newImage;
 	loadImage(newImage);
 
-	switch(channel)
-	{
-	case 0:
-		image = std::move(newImage.convertToFormat(QImage::Format_ARGB4444_Premultiplied));
-		break;
-	case 1:
-	{
-		image = std::move(QImage(newImage.width(), newImage.height(), QImage::Format_ARGB32_Premultiplied));
-		image.fill(0);
-
-		for(int x = 0; x < image.width(); ++x)
-		{
-			for(int y = 0; y < image.height(); ++y)
-			{
-				if(qAlpha(newImage.pixel(x, y) > 128))
-				{
-					auto g = qGray(newImage.pixel(x, y));
-					image.setPixel(x, y, ((((0xFF00 | g) << 8) | g) << 8)| g);
-				}
-			}
-		}
-
-		break;
-	}
-	case 2:
-	{
-		if(!palette332.size())
-		{
-			for(int r = 0; r < 8; ++r)
-			{
-				for(int g = 0; g < 8; ++g)
-				{
-					for(int b = 0; b < 4; ++b)
-					{
-						palette332.push_back(qRgba(r << 5, g << 5, b << 6, 0xFF));
-					}
-				}
-			}
-		}
-
-		QImage dithered = newImage.convertToFormat(QImage::Format_Indexed8, palette332, Qt::PreferDither);
-		dithered = std::move(dithered.convertToFormat(QImage::Format_ARGB4444_Premultiplied));
-
-		for(int x = 0; x < newImage.width(); ++x)
-		{
-			for(int y = 0; y < newImage.height(); ++y)
-			{
-				if(qAlpha(newImage.pixel(x, y)) < 128)
-				{
-					dithered.setPixel(x, y, 0);
-					continue;
-				}
-			}
-		}
-
-		image = std::move(dithered);
-		break;
-	}
-	default:
-		image = std::move(newImage.convertToFormat(QImage::Format_ARGB32_Premultiplied));
-		break;
-	}
-
+	image = std::move(newImage.convertToFormat(QImage::Format_ARGB32_Premultiplied));
 
 	ui->widget->repaint();
 }
 
-void MainWindow::actionImportRooms()
+void MainWindow::actionImportRooms(bool type)
 {
 	QImage image;
 	if(!loadImage(image))
@@ -217,7 +166,7 @@ void MainWindow::actionImportRooms()
 
 	for(int i = 0; i < 3; ++i)
 	{
-		WorkerThread *workerThread = new WorkerThread(*this, *room_map);
+		WorkerThread *workerThread = new WorkerThread(*this, *room_map, type);
 		connect(workerThread, &WorkerThread::taking_item, progress, &QProgressDialog::setValue);
 		connect(workerThread, &WorkerThread::finished, workerThread, &WorkerThread::deleteLater);
 		connect(workerThread, &WorkerThread::work_finished, this, [this](){ui->actionImportRooms->setEnabled(true); delete progress; delete room_map; });
@@ -268,7 +217,7 @@ void MainWindow::documentOpen()
 		{
 			return;
 		}
-	} while(!openKreaturesFile(name.toStdString(), 13));
+	} while(!openKreaturesFile(name.toStdString(), 17));
 }
 
 void MainWindow::openParallaxLayer()
@@ -282,9 +231,77 @@ void MainWindow::openParallaxLayer()
 		{
 			return;
 		}
-	} while(!openKreaturesFile(name.toStdString(), 4));
+	} while(!openKreaturesFile(name.toStdString(), 5));
 }
 
+
+std::vector<QRgb> readTile(FILE * file, int x0, int y0)
+{
+	uint8_t compression_type;
+	uint32_t size;
+	fread(&compression_type, 1, 1, file);
+	fread(&size, 4, 1, file);
+	size = byte_swap(size);
+
+	std::vector<uint8_t> image_data(size, 0);
+
+	for(int l = 0; l < size; )
+	{
+		uint32_t len;
+		fread(&len, 4, 1, file);
+		len = byte_swap(len);
+
+		switch(compression_type)
+		{
+		case 1:
+			for(; l+8 <= size && len; len -= 8, l += 8)
+			{
+				memset(image_data.data() + (l+4), 0xFF, 4);
+			}
+			break;
+		case 3:
+			break;
+		case 5:
+			for(; l+16 <= size && len; len -= 16, l += 16)
+			{
+				image_data[l+1] = 0x05;
+			}
+			break;
+		}
+
+		l += len;
+
+
+		if(l >= size)
+		{
+			break;
+		}
+
+		fread(&len, 4, 1, file);
+		len = byte_swap(len);
+		fread(image_data.data() + l, 1, len, file);
+		l += len;
+	}
+
+	switch(compression_type)
+	{
+	default:
+		compression_type = squish::kDxt1;
+		break;
+	case 3:
+		compression_type = squish::kDxt3;
+		break;
+	case 5:
+		compression_type = squish::kDxt5;
+		break;
+	}
+
+	std::vector<QRgb> uncompressed_image(65536);
+	squish::DecompressImage((uint8_t*) uncompressed_image.data(), 256, 256, image_data.data(), compression_type);
+	return uncompressed_image;
+}
+
+uint32_t packBytes(uint32_t a, uint32_t b, uint32_t c,uint32_t d);
 
 bool MainWindow::openKreaturesFile(std::string name, int read_length)
 {
@@ -311,11 +328,11 @@ bool MainWindow::openKreaturesFile(std::string name, int read_length)
 	}
 
 	uint16_t width, height;
-	uint32_t image_offsets[13];
+	uint32_t image_offsets[17];
 
 	fread(&width, 2, 1, file);
 	fread(&height, 2, 1, file);
-	memset(image_offsets, 0, 4*13);
+	memset(image_offsets, 0, 4*17);
 	fread(image_offsets, 4, read_length, file);
 
 	width = byte_swap(width);
@@ -330,11 +347,28 @@ bool MainWindow::openKreaturesFile(std::string name, int read_length)
 
 	std::vector<uint32_t> tile_offsets(tiles_x*tiles_y);
 
+	int length = tiles_x*tiles_y;
+	int mult = 0;
+
 	for(int map = 0; map < 3; ++map)
 	{
-		for(int channel = 0; channel < 4; ++channel)
+		for(int channel = 0; channel < 5; ++channel)
 		{
-			if(!image_offsets[map*4 + channel])
+			if(image_offsets[map*5 + channel])
+			{
+				++mult;
+			}
+		}
+	}
+
+	QProgressDialog progress(tr("Loading Kreatures Background..."), 0L, 0, mult*length, this);
+	length = 0;
+
+	for(int map = 0; map < 3; ++map)
+	{
+		for(int channel = 0; channel < 5; ++channel)
+		{
+			if(!image_offsets[map*5 + channel])
 			{
 				background[map][channel] = QImage();
 				continue;
@@ -343,14 +377,21 @@ bool MainWindow::openKreaturesFile(std::string name, int read_length)
 			background[map][channel] = QImage(tiles_x << 8, tiles_y << 8, QImage::Format_ARGB32);
 			background[map][channel].fill(0);
 
-			fseek(file, byte_swap(image_offsets[map*4+channel]), SEEK_SET);
+			fseek(file, byte_swap(image_offsets[map*5+channel]), SEEK_SET);
 			fread(tile_offsets.data(), 4, tile_offsets.size(), file);
 
 			for(uint16_t tile = 0; tile < tile_offsets.size(); ++tile)
 			{
+				progress.setValue(++length);
+
 				if(!tile_offsets[tile])
 				{
 					continue;
+				}
+
+				if((length & 0x03) == 0)
+				{
+					QApplication::processEvents();
 				}
 
 				int x0 = (tile / tiles_y) << 8;
@@ -358,35 +399,33 @@ bool MainWindow::openKreaturesFile(std::string name, int read_length)
 
 				fseek(file, byte_swap(tile_offsets[tile]), SEEK_SET);
 
-				for(int l = 0; l < 0x10000; )
+				std::vector<QRgb> uncompressed_image(readTile(file, x0, y0));
+
+				for(int l = 0; l < 0x10000; ++l)
 				{
-					uint32_t length;
-					fread(&length, 4, 1, file);
-					l += byte_swap(length);
-
-					if(l >= 0x10000)
+					QRgb c = uncompressed_image[l];
+					if(c)
 					{
-						break;
+						c = packBytes(qRed(c), qGreen(c), qBlue(c), qAlpha(c));
+
+						if(channel >= 2)
+						{
+							c = qRgba(qBlue(c), qRed(c), 0, 255);
+						}
 					}
 
-					fread(&length, 4, 1, file);
-					length = byte_swap(length);
+					uint8_t x = l & 0xFF;
+					uint8_t y = l >> 8;
 
-					for(; length; --length, ++l)
-					{
-						uint8_t x = l & 0xFF;
-						uint8_t y = l >> 8;
-
-						background[map][channel].setPixel(x0 + x, y0 + y, readColor(file, channel));
-					}
+					background[map][channel].setPixel(x0 + x, y0 + y, c);
 				}
 			}
 		}
 	}
 
-	if(image_offsets[12])
+	if(image_offsets[15])
 	{
-		fseek(file, byte_swap(image_offsets[12]), SEEK_SET);
+		fseek(file, byte_swap(image_offsets[15]), SEEK_SET);
 		rooms.clear();
 		rooms.resize(totalTiles());
 
@@ -405,6 +444,31 @@ bool MainWindow::openKreaturesFile(std::string name, int read_length)
 				Room room;
 				fread(&room, sizeof(Room), 1, file);
 				rooms[i].push_back(room);
+			}
+		}
+	}
+
+	if(image_offsets[16])
+	{
+		fseek(file, byte_swap(image_offsets[16]), SEEK_SET);
+		fluids.clear();
+		fluids.resize(totalTiles());
+
+		for(auto i = 0; i < totalTiles(); ++i)
+		{
+			uint8_t length;
+			fread(&length, 1, 1, file);
+
+			if(length == 0)
+			{
+				continue;
+			}
+
+			for(int j = 0; j < length; ++j)
+			{
+				Room room;
+				fread(&room, sizeof(Room), 1, file);
+				fluids[i].push_back(room);
 			}
 		}
 	}

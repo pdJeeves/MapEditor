@@ -3,9 +3,10 @@
 int WorkerThread::i = 0;
 bool WorkerThread::canceled = 0;
 
-WorkerThread::WorkerThread(MainWindow & main_window, QImage & image) :
+WorkerThread::WorkerThread(MainWindow & main_window, QImage & image, bool type) :
 	main_window(main_window),
-	image(image)
+	image(image),
+	type(type)
 {
 }
 
@@ -30,7 +31,16 @@ static int working_threads = 0;
 		int y = j % main_window.tiles().height();
 
 		auto list = getRoomsFromImage(image.copy(QRect(x*256, y*256, 256, 256)));
-		main_window.rooms[j].splice(main_window.rooms[j].end(), std::move(list));
+
+		if(type)
+		{
+			main_window.rooms[j].splice(main_window.rooms[j].end(), std::move(list));
+		}
+		else
+		{
+			main_window.fluids[j].splice(main_window.fluids[j].end(), std::move(list));
+		}
+
 		mutex.lock();
 	}
 	--working_threads;

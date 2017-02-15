@@ -49,7 +49,7 @@ public:
 	QSize dimensions;
 	inline QSize tiles() const { return QSize((dimensions.width() + 255) / 256, (dimensions.height() + 255) / 256); }
 	inline int totalTiles() const { return tiles().width() * tiles().height(); }
-	QImage background[3][4];
+	QImage background[3][5];
 
 	QString filename;
 	QString filepath;
@@ -57,6 +57,7 @@ public:
 	float zoom;
 	QTimer autosaveTimer;
 	std::vector< std::list<Room> > rooms;
+	std::vector< std::list<Room> > fluids;
 
 	void onMousePress(QPoint pos, QSize size);
 	void onMouseRelease(QPoint pos, QSize size);
@@ -64,7 +65,7 @@ public:
 	void onMouseMoveEvent(QPoint pos, QSize size);
 	QString getToolTip(QPoint pos, QSize size);
 
-	void replaceImage(QImage & image, int channel);
+	void replaceImage(QImage & image);
 	void draw(QPainter & painter, QPoint pos, QSize size);
 
 	QMenu * showContextMenu(ViewWidget * widget, QPoint pos, QSize size);
@@ -95,7 +96,7 @@ private:
 	void editPaste();
 	void editDelete();
 
-	void actionImportRooms();
+	void actionImportRooms(bool type);
 	void removeThinRooms();
 	void meld();
 	void removeHidden();

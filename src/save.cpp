@@ -9,6 +9,8 @@
 #include "byteswap.h"
 #include <QPainter>
 #include <iostream>
+#include <squish.h>
+#include <QProgressDialog>
 
 
 bool MainWindow::isVicintitySolid(int map, int channel, int x0, int y0) const
@@ -110,11 +112,270 @@ uint32_t MainWindow::runLength(uint32_t i, int x0, int y0, int map, int channel,
 
 	return 0x10000 - i;
 }
+#if 1
+struct BLOCK_128
+{
+	uint8_t data[16];
+
+	operator bool() const
+	{
+		return
+		(data[0] | (data[1] & ~0x05) | data[2] | data[3] |
+		 data[4] | data[5] | data[6] | data[7] |
+		 data[8] | data[9] | data[10] | data[11] |
+		 data[12] | data[13] | data[14] | data[15]);
+	}
+};
+
+struct BLOCK_64
+{
+	uint8_t data[8];
+
+	operator bool() const
+	{
+#if 1
+		static uint8_t cmp[] = { 0, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF };
+		auto r = memcmp(data, cmp, 8);
+		return r;
+#else
+		return true;
+	#endif
+	}
+};
+#else
+struct BLOCK_128
+{
+	BLOCK_128() :
+	a(0), b(0) {}
+
+	uint64_t a;
+	uint64_t b;
+
+	operator bool() const
+	{
+		return (a|b);
+	}
+};
+#endif
+
+uint8_t scanAlpha(const QImage & image, const uint16_t x, const uint16_t y)
+{
+	uint8_t min = 255;
+	uint8_t max = 0;
+
+	for(uint16_t _y = y; _y < y+4; ++_y)
+	{
+		for(uint16_t _x = x; _x < x+4; ++_x)
+		{
+			uint8_t c = qAlpha(image.pixel(_x, _y));
+
+			min = std::min(min, c);
+			max = std::max(max, c);
+		}
+	}
+
+	if(((min >> 4) == 0 || (max >> 4) == 0x0F))
+	{
+		return 1;
+	}
+
+	if(0x01 > (max - min))
+	{
+		return 5;
+	}
+
+	return 3;
+}
+
+uint32_t packBytes(uint32_t a, uint32_t b, uint32_t c,uint32_t d)
+{
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+	return (((((d << 8) | c ) << 8) | b) << 8) | a;
+#else
+	return (((((a << 8) | b ) << 8) | c) << 8) | d;
+#endif
+}
+
+#define C16_COMPRESSION
+
+void writeDtx1(FILE * file, std::vector<uint32_t> & uncompressed_image, int width, int height)
+{
+	uint32_t size = GetStorageRequirements(width, height, squish::kDxt1);
+
+	{
+		uint8_t type = 1;
+		fwrite(&type, 1, 1, file);
+		fwrite(&size, 4, 1, file);
+	}
+
+	std::vector<BLOCK_64> blocks(size >> 3);
+	squish::CompressImage((uint8_t*) uncompressed_image.data(), width, height, (void*) blocks.data(),
+		squish::kDxt1 | squish::kColourIterativeClusterFit);
+#if !defined(C16_COMPRESSION)
+	uint32_t length = 0;
+	fwrite(&length, 4, 1, file);
+	fwrite(&size, 4, 1, file);
+	fwrite(blocks.data(), 8, blocks.size(), file);
+#else
+	for(size_t i = 0; i < blocks.size(); )
+	{
+		uint32_t length;
+		for(length = 0; i < blocks.size() && !blocks[i]; ++i, ++length) {}
+
+		length <<= 3;
+		length = byte_swap(length);
+		fwrite(&length, 4, 1, file);
+
+		if(i >= size)
+		{
+			break;
+		}
+
+		for(length = 0; i+length < blocks.size() && blocks[i+length]; ++length)  {}
+
+		{
+			uint32_t len = length << 3;
+			len = byte_swap(len);
+			fwrite(&len, 4, 1, file);
+		}
+
+		fwrite(blocks.data() + i, 8, length, file);
+		i += length;
+	}
+#endif
+}
 
 uint32_t MainWindow::writeTile(FILE * file, int x0, int y0, int map, int channel) const
 {
+	uint16_t compression_1 = 0;
+	uint16_t compression_3 = 0;
+	uint16_t compression_5 = 0;
+
+	for(int y = 0; y < image.height(); y += 4)
+	{
+		for(int x = 0; x < image.width(); x += 4)
+		{
+			switch(scanAlpha(image, x, y))
+			{
+			case 1:
+				++compression_1;
+				break;
+			case 3:
+				++compression_3;
+				break;
+			case 5:
+				++compression_5;
+				break;
+			}
+		}
+	}
+
+	uint8_t compression_type = 1;
+
+	if(compression_3 > 8 && compression_3 > compression_5)
+	{
+		compression_type = 3;
+	}
+	else if(compression_5 > 8 && compression_5 >= sqrt(compression_3)/2)
+	{
+		compression_type = 5;
+	}
+
+	uint32_t r = byte_swap((uint32_t) ftell(file));
+	std::vector<uint32_t> uncompressed_image(65536, 0);
+
+	for(; i < 0x10000; ++i)
+	{
+		int x = (i & 0xFF);
+		int y = (i >> 8);
+
+		auto c = background[map][channel].pixel(x + x0, y + y0);
+		if(!qAlpha(c))
+		{
+			continue;
+		}
+
+		if(channel >= 2)
+		{
+			uncompressed_image[i] = (uint32_t) packBytes(0, qGreen(c), 0, qRed(c));
+			continue;
+		}
+
+		uncompressed_image[i] = (uint32_t) packBytes(qRed(c), qGreen(c), qBlue(c), qAlpha(c));
+
+		compression_type = scanAlpha(background[map][channel], x+x0, y+y0, compression_type);
+	}
+
+	if(compression_type == 1)
+	{
+		writeDtx1(file, uncompressed_image, 256, 256);
+		return r;
+	}
+
+	fwrite(&compression_type, 1, 1, file);
+	switch(compression_type)
+	{
+	default:
+		compression_type = squish::kDxt3;
+		break;
+	case 5:
+		compression_type = squish::kDxt5;
+		break;
+	}
+
+	uint32_t size = squish::GetStorageRequirements(256, 256, compression_type);
+	{
+		uint32_t length = byte_swap(size);
+		fwrite(&length, 4, 1, file);
+	}
+
+	std::vector<BLOCK_128> blocks(size >> 4);
+
+	squish::CompressImage((uint8_t*) uncompressed_image.data(), 256, 256, (void*) blocks.data(), compression_type | squish::kColourIterativeClusterFit | squish::kWeightColourByAlpha);
+
+#if !defined(C16_COMPRESSION)
+	{
+	uint32_t length = 0;
+	fwrite(&length, 4, 1, file);
+	length = byte_swap(size);
+	fwrite(&length, 4, 1, file);
+	fwrite(blocks.data(), 1, size, file);
+	}
+#else
+	for(size_t i = 0; i < blocks.size(); )
+	{
+		uint32_t length = 0;
+		for(length = 0; i < blocks.size() && !blocks[i]; ++i, ++length) {}
+
+		length <<= 4;
+		length = byte_swap(length);
+		fwrite(&length, 4, 1, file);
+
+		if(i >= 0x10000)
+		{
+			break;
+		}
+
+		for(length = 0; i+length < blocks.size() && blocks[i+length]; ++length)  {}
+
+		{
+			uint32_t len = length << 4;
+			len = byte_swap(len);
+			fwrite(&len, 4, 1, file);
+		}
+
+		fwrite(blocks.data() + i, 16, length, file);
+		i += length;
+	}
+#endif
+
+	return r;
+
+#if 0
 	uint32_t r = byte_swap((uint32_t) ftell(file));
 	uint32_t length;
+
+	std::vector<uint8_t> tile_data;
 
 	for(uint32_t i = 0; i < 0x10000;)
 	{
@@ -149,8 +410,8 @@ uint32_t MainWindow::writeTile(FILE * file, int x0, int y0, int map, int channel
 	}
 
 	return r;
+#endif
 }
-
 
 void MainWindow::saveParallaxLayer()
 {
@@ -182,11 +443,11 @@ top:
 const static int header_offset = 8;
 //seek to where we can start writing rooms
 
-	uint32_t image_offsets[4];
+	uint32_t image_offsets[5];
 	fseek(file, sizeof(image_offsets), SEEK_CUR);
 	std::vector<uint32_t> offsets(totalTiles());
 
-	for(auto j = 0; j < 4; ++j)
+	for(auto j = 0; j < 5; ++j)
 	{
 		if(background[0][j].isNull())
 		{
@@ -202,14 +463,25 @@ const static int header_offset = 8;
 		fgetpos(file, &offset_pos);
 		fseek(file, offsets.size() * 4, SEEK_CUR);
 
+		QProgressDialog progress(tr("Compressing Parallax Layer %1...").arg(j), 0L, 0, totalTiles(), this);
+
 		for(int x = 0; x < tiles().width(); ++x)
 		{
 			for(int y = 0; y < tiles().height(); ++y)
 			{
-				offsets[x*tiles().height() + y] = writeTile(file, x << 8, y << 8, 0, j);
-				if(offsets[x*tiles().height() + y])
+				int tile = x*tiles().height() + y;
+				offsets[tile] = writeTile(file, x << 8, y << 8, 0, j);
+
+				if(offsets[tile])
 				{
 					++tiles_written;
+				}
+
+				progress.setValue(tile);
+
+				if((tile & 0x03) == 0)
+				{
+					qApp->processEvents();
 				}
 			}
 		}
@@ -263,17 +535,17 @@ void MainWindow::documentSave()
 const static int header_offset = 8;
 //seek to where we can start writing rooms
 
-	uint32_t image_offsets[13];
+	uint32_t image_offsets[17];
 	fseek(file, sizeof(image_offsets), SEEK_CUR);
 	std::vector<uint32_t> offsets(totalTiles());
 
 	for(auto i = 0; i < 3; ++i)
 	{
-		for(auto j = 0; j < 4; ++j)
+		for(auto j = 0; j < 5; ++j)
 		{
 			if(background[i][j].isNull())
 			{
-				image_offsets[i*4 + j] = 0;
+				image_offsets[i*5 + j] = 0;
 				continue;
 			}
 
@@ -285,14 +557,25 @@ const static int header_offset = 8;
 			fgetpos(file, &offset_pos);
 			fseek(file, offsets.size() * 4, SEEK_CUR);
 
+			QProgressDialog progress(tr("Compressing Background layer %1...").arg(i*4 + j), 0L, 0, totalTiles(), this);
+
 			for(int x = 0; x < tiles().width(); ++x)
 			{
 				for(int y = 0; y < tiles().height(); ++y)
 				{
-					offsets[x*tiles().height() + y] = writeTile(file, x << 8, y << 8, i, j);
-					if(offsets[x*tiles().height() + y])
+					int tile = x*tiles().height() + y;
+
+					offsets[tile] = writeTile(file, x << 8, y << 8, i, j);
+					if(offsets[tile])
 					{
 						++tiles_written;
+					}
+
+					progress.setValue(tile);
+
+					if((tile & 0x03) == 0)
+					{
+						qApp->processEvents();
 					}
 				}
 			}
@@ -312,7 +595,7 @@ const static int header_offset = 8;
 		}
 	}
 
-	image_offsets[12] = byte_swap((uint32_t) ftell(file));
+	image_offsets[15] = byte_swap((uint32_t) ftell(file));
 
 	for(auto i = 0; i < totalTiles(); ++i)
 	{
@@ -320,6 +603,19 @@ const static int header_offset = 8;
 		fwrite(&length, 1, 1, file);
 
 		for(auto j = rooms[i].begin(); j != rooms[i].end(); ++j)
+		{
+			fwrite(&(*j), sizeof(Room), 1, file);
+		}
+	}
+
+	image_offsets[16] = byte_swap((uint32_t) ftell(file));
+
+	for(auto i = 0; i < totalTiles(); ++i)
+	{
+		uint8_t length = fluids[i].size();
+		fwrite(&length, 1, 1, file);
+
+		for(auto j = fluids[i].begin(); j != fluids[i].end(); ++j)
 		{
 			fwrite(&(*j), sizeof(Room), 1, file);
 		}

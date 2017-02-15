@@ -117,23 +117,35 @@
      <property name="title">
       <string>Background</string>
      </property>
-     <addaction name="actionBackgroundColorMap"/>
-     <addaction name="actionBackgroundBumpMap"/>
-     <addaction name="actionBackgroundEffectMap"/>
      <addaction name="actionBackgroundBakedMap"/>
+     <addaction name="actionBackgroundAlbedoMap"/>
+     <addaction name="actionBackgroundNormalMap"/>
+     <addaction name="actionBackgroundMicrosurfaceMap"/>
+     <addaction name="actionBackgroundReflectivityMap"/>
     </widget>
     <widget class="QMenu" name="menuForeground_2">
      <property name="title">
       <string>Foreground</string>
      </property>
-     <addaction name="actionForegroundColorMap"/>
-     <addaction name="actionForegroundBumpMap"/>
-     <addaction name="actionForegroundEffectMap"/>
      <addaction name="actionForegroundBakedMap"/>
+     <addaction name="actionForegroundAlbedoMap"/>
+     <addaction name="actionForegroundNormalMap"/>
+     <addaction name="actionForegroundMicrosurfaceMap"/>
+     <addaction name="actionForegroundReflectivityMap"/>
+    </widget>
+    <widget class="QMenu" name="menuCutouts">
+     <property name="title">
+      <string>Cutouts</string>
+     </property>
+     <addaction name="actionCutoutsBakedMap"/>
+     <addaction name="actionCutoutsAlbedoMap"/>
+     <addaction name="actionCutoutsNormalMap"/>
+     <addaction name="actionCutoutsMicrosurfaceMap"/>
+     <addaction name="actionCutoutsReflectivityMap"/>
     </widget>
     <addaction name="menuBackground_3"/>
     <addaction name="menuForeground_2"/>
-    <addaction name="actionCutouts"/>
+    <addaction name="menuCutouts"/>
    </widget>
    <widget class="QMenu" name="menuView">
     <property name="title">
@@ -144,10 +156,11 @@
     <addaction name="actionShow_Cutouts"/>
     <addaction name="actionRooms"/>
     <addaction name="separator"/>
-    <addaction name="actionShow_Color_Map"/>
-    <addaction name="actionShow_Bump_Map"/>
-    <addaction name="actionShow_Effect_Map"/>
     <addaction name="actionShow_Baked_Map"/>
+    <addaction name="actionShow_Albedo_Map"/>
+    <addaction name="actionShow_Normal_Map"/>
+    <addaction name="actionShow_Microsurface_Map"/>
+    <addaction name="actionShow_Reflectivity_Map"/>
     <addaction name="separator"/>
     <addaction name="actionActual_Size"/>
     <addaction name="actionZoom_In"/>
@@ -172,11 +185,18 @@
     </property>
     <addaction name="actionAbout"/>
    </widget>
+   <widget class="QMenu" name="menuFluids">
+    <property name="title">
+     <string>Fluids</string>
+    </property>
+    <addaction name="actionAdd_Fluid_Map"/>
+   </widget>
    <addaction name="menuFile"/>
    <addaction name="menuEdit"/>
    <addaction name="menuView"/>
    <addaction name="menuReplace"/>
    <addaction name="menuRooms"/>
+   <addaction name="menuFluids"/>
    <addaction name="menuHelp"/>
   </widget>
   <widget class="QStatusBar" name="statusBar"/>
@@ -354,19 +374,19 @@
     <string>Del</string>
    </property>
   </action>
-  <action name="actionBackgroundColorMap">
+  <action name="actionBackgroundAlbedoMap">
    <property name="text">
-    <string>Color Map</string>
+    <string>Albedo Map</string>
    </property>
   </action>
-  <action name="actionBackgroundBumpMap">
+  <action name="actionBackgroundNormalMap">
    <property name="text">
-    <string>Bump Map</string>
+    <string>Normal Map</string>
    </property>
   </action>
-  <action name="actionBackgroundEffectMap">
+  <action name="actionBackgroundReflectivityMap">
    <property name="text">
-    <string>Effect Map</string>
+    <string>Reflectivity Map</string>
    </property>
   </action>
   <action name="actionBackgroundBakedMap">
@@ -374,19 +394,19 @@
     <string>Baked Map</string>
    </property>
   </action>
-  <action name="actionForegroundColorMap">
+  <action name="actionForegroundAlbedoMap">
    <property name="text">
-    <string>Color Map</string>
+    <string>Albedo Map</string>
    </property>
   </action>
-  <action name="actionForegroundBumpMap">
+  <action name="actionForegroundNormalMap">
    <property name="text">
-    <string>Bump Map</string>
+    <string>Normal Map</string>
    </property>
   </action>
-  <action name="actionForegroundEffectMap">
+  <action name="actionForegroundReflectivityMap">
    <property name="text">
-    <string>Effect Map</string>
+    <string>Reflectivity Map</string>
    </property>
   </action>
   <action name="actionForegroundBakedMap">
@@ -496,25 +516,12 @@
     <string>About</string>
    </property>
   </action>
-  <action name="actionCutouts">
-   <property name="text">
-    <string>Cutouts</string>
-   </property>
-  </action>
-  <action name="actionShow_Bump_Map">
+  <action name="actionShow_Albedo_Map">
    <property name="checkable">
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Show Bump Map</string>
-   </property>
-  </action>
-  <action name="actionShow_Color_Map">
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <property name="text">
-    <string>Show Color Map</string>
+    <string>Show Albedo Map</string>
    </property>
   </action>
   <action name="actionShow_Baked_Map">
@@ -528,7 +535,7 @@
     <string>Show Baked Map</string>
    </property>
   </action>
-  <action name="actionShow_Effect_Map">
+  <action name="actionShow_Microsurface_Map">
    <property name="checkable">
     <bool>true</bool>
    </property>
@@ -536,7 +543,18 @@
     <bool>false</bool>
    </property>
    <property name="text">
-    <string>Show Effect Map</string>
+    <string>Show Microsurface Map</string>
+   </property>
+  </action>
+  <action name="actionShow_Normal_Map">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>Show Normal Map</string>
    </property>
   </action>
   <action name="actionRemove_Hidden_Pixels">
@@ -562,6 +580,54 @@
   <action name="actionImport_Parallax_Layer">
    <property name="text">
     <string>Import Parallax Layer</string>
+   </property>
+  </action>
+  <action name="actionAdd_Fluid_Map">
+   <property name="text">
+    <string>Import Fluid Map</string>
+   </property>
+  </action>
+  <action name="actionBackgroundMicrosurfaceMap">
+   <property name="text">
+    <string>Microsurface Map</string>
+   </property>
+  </action>
+  <action name="actionCutoutsBakedMap">
+   <property name="text">
+    <string>Baked Map</string>
+   </property>
+  </action>
+  <action name="actionCutoutsAlbedoMap">
+   <property name="text">
+    <string>Albedo Map</string>
+   </property>
+  </action>
+  <action name="actionForegroundMicrosurfaceMap">
+   <property name="text">
+    <string>Microsurface Map</string>
+   </property>
+  </action>
+  <action name="actionCutoutsNormalMap">
+   <property name="text">
+    <string>Normal Map</string>
+   </property>
+  </action>
+  <action name="actionCutoutsMicrosurfaceMap">
+   <property name="text">
+    <string>Microsurface Map</string>
+   </property>
+  </action>
+  <action name="actionCutoutsReflectivityMap">
+   <property name="text">
+    <string>Reflectivity</string>
+   </property>
+  </action>
+  <action name="actionShow_Reflectivity_Map">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show Reflectivity Map</string>
    </property>
   </action>
  </widget>
