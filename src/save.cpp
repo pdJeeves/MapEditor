@@ -165,7 +165,7 @@ uint8_t scanAlpha(const QImage & image, const uint16_t x, const uint16_t y)
 
 	if(qAlpha(image.pixel(x, y)) == qAlpha(image.pixel(x+3, y+3)))
 	{
-		return 1;
+		return qAlpha(image.pixel(x, y)) > 16;
 	}
 
 	for(uint16_t _y = y; _y < y+4; ++_y)
@@ -275,6 +275,11 @@ uint32_t MainWindow::writeTile(FILE * file, int x0, int y0, int map, int channel
 		}
 	}
 
+	if(!(compression_1|compression_3|compression_5))
+	{
+		return 0;
+	}
+
 	uint8_t compression_type = 1;
 
 	if(compression_1 < (compression_3+compression_5)/8)
@@ -376,46 +381,6 @@ uint32_t MainWindow::writeTile(FILE * file, int x0, int y0, int map, int channel
 
 	return r;
 
-#if 0
-	uint32_t r = byte_swap((uint32_t) ftell(file));
-	uint32_t length;
-
-	std::vector<uint8_t> tile_data;
-
-	for(uint32_t i = 0; i < 0x10000;)
-	{
-		length = runLength(i, x0, y0, map, channel, true);
-
-		if(length == 0x10000)
-		{
-			return 0;
-		}
-
-		i += length;
-		length = byte_swap(length);
-		fwrite(&length, 4, 1, file);
-
-		if(i >= 0x10000)
-		{
-			break;
-		}
-
-		length = runLength(i, x0, y0, map, channel, false);
-		length = byte_swap(length);
-		fwrite(&length, 4, 1, file);
-		length = byte_swap(length);
-
-		for(; length != 0; --length, ++i)
-		{
-			int x = (i & 0xFF) + x0;
-			int y = (i >> 8) + y0;
-
-			writeColor(file, background[map][channel].pixel(x, y), channel);
-		}
-	}
-
-	return r;
-#endif
 }
 
 void MainWindow::saveParallaxLayer()
@@ -540,8 +505,9 @@ void MainWindow::documentSave()
 const static int header_offset = 8;
 //seek to where we can start writing rooms
 
-	uint32_t image_offsets[17];
-	fseek(file, sizeof(image_offsets), SEEK_CUR);
+	std::array<uint32_t, 17> image_offsets;
+	image_offsets.fill(0);
+	fseek(file, 4*image_offsets.size(), SEEK_CUR);
 	std::vector<uint32_t> offsets(totalTiles());
 
 	for(auto i = 0; i < 3; ++i)
@@ -556,13 +522,13 @@ const static int header_offset = 8;
 
 			int tiles_written = 0;
 
-			image_offsets[i*4 + j] = byte_swap((uint32_t) ftell(file));
+			image_offsets[i*5 + j] = byte_swap((uint32_t) ftell(file));
 
 			fpos_t offset_pos;
 			fgetpos(file, &offset_pos);
 			fseek(file, offsets.size() * 4, SEEK_CUR);
 
-			QProgressDialog progress(tr("Compressing Background layer %1...").arg(i*4 + j), 0L, 0, totalTiles(), this);
+			QProgressDialog progress(tr("Compressing Background layer %1...").arg(i*5 + j), 0L, 0, totalTiles(), this);
 
 			for(int x = 0; x < tiles().width(); ++x)
 			{
@@ -627,7 +593,7 @@ const static int header_offset = 8;
 	}
 
 	fseek(file, header_offset, SEEK_SET);
-	fwrite(image_offsets, 1, sizeof(image_offsets), file);
+	fwrite(&(image_offsets[0]), 4, image_offsets.size(), file);
 
 	fclose(file);
 	autosaveTimer.start();
