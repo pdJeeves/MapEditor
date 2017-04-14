@@ -15,6 +15,7 @@
 #include <QProgressDialog>
 #include "roomsfromimage.h"
 #include "workerthread.h"
+#include "palette16.h"
 #include <squish.h>
 #include <QProgressBar>
 
@@ -41,7 +42,7 @@ static void initializeImageFileDialog(QFileDialog &dialog, QFileDialog::AcceptMo
         dialog.setDefaultSuffix("jpg");
 }
 
-bool MainWindow::loadImage(QImage & ret_image)
+bool MainWindow::loadImage(QImage & ret_image, bool room_map)
 {
 top:
 	QFileDialog dialog(this, tr("Open File"));
@@ -73,7 +74,7 @@ top:
 		return false;
 	}
 
-	if(!dimensionCheck(newImage.size()))
+	if(!dimensionCheck(newImage.size(), room_map))
 	{
 		goto top;
 	}
@@ -81,7 +82,13 @@ top:
 	if(dimensions == QSize(-1, -1))
 	{
 		filename = QFileInfo(name).fileName();
+
 		dimensions = newImage.size();
+
+		if(room_map)
+		{
+			dimensions = QSize(dimensions.width()*2, dimensions.height()*2);
+		}
 
 		rooms.clear();
 		rooms.resize(totalTiles());
@@ -90,22 +97,33 @@ top:
 		fluids.resize(totalTiles());
 	}
 
-	if(newImage.size().width() % 256 == 0
+	if((!room_map
+	&& newImage.size().width() % 256 == 0
 	&& newImage.size().height() % 256 == 0)
+	|| (room_map
+	&& newImage.size().width() % 128 == 0
+	&& newImage.size().height() % 128 == 0))
 	{
 		ret_image = std::move(newImage);
 		return true;
 	}
 
-	QImage image((newImage.size().width() + 255) & 0xFF00, (newImage.size().height() + 255) & 0xFF00, QImage::Format_ARGB32);
+	QImage image;
+
+	if(!room_map)
+	{
+		image = QImage((newImage.size().width() + 255) & 0xFF00, (newImage.size().height() + 255) & 0xFF00, QImage::Format_ARGB32);
+	}
+	else
+	{
+		image = QImage((newImage.size().width() + 127) & 0xFF80, (newImage.size().height() + 127) & 0xFF80, QImage::Format_ARGB32);
+	}
+
 	image.fill(0);
 
 	for(int y = 0; y < newImage.size().height(); ++y)
 	{
-		for(int x = 0; x < newImage.size().width(); ++x)
-		{
-			image.setPixel(x, y, newImage.pixel(x, y));
-		}
+		memcpy(image.scanLine(y), newImage.scanLine(y), newImage.bytesPerLine());
 	}
 
 	ret_image = std::move(image);
@@ -124,39 +142,46 @@ void MainWindow::replaceImage(QImage & image)
 
 void MainWindow::actionImportRooms(bool type)
 {
+	int value, convertor;
+
 	QImage image;
-	if(!loadImage(image))
+	if(!loadImage(image, true))
 	{
 		return;
 	}
 
-	static QVector<QRgb> palette16;
+#if 1
+	value = image.height() + totalTiles();
+#else
+	value = image.height()*3 + image.width();
+#endif
 
-	if(!palette16.size())
-	{
-		palette16.push_back(0);
+	progress = new QProgressDialog(tr("Processing Room Map..."), 0L, 0L, value, this);
 
-		for(uint8_t i = 0; i < 16; ++i)
-		{
-			palette16.push_back(palette[i]);
-		}
-	}
-
-	progress = new QProgressDialog(tr("Processing Image..."), "Cancel", 0, totalTiles(), this);
-
-	room_map = new QImage(std::move(image.convertToFormat(QImage::Format_Indexed8, palette16, Qt::ThresholdDither)));
+	convertor = value / 100;
+	value = 0;
 
 	for(int y = 0; y < image.height(); ++y)
 	{
 		for(int x = 0; x < image.width(); ++x)
 		{
-			if(qAlpha(image.pixel(x, y)) < 200)
+			if(qAlpha(image.pixel(x,y)) < 200)
 			{
-				room_map->setPixel(x, y, 0);
+				image.setPixel(x,y, 0);
 			}
+		}
+
+		if(++value % convertor == 0)
+		{
+			progress->setValue(value);
+			qApp->processEvents();
 		}
 	}
 
+	roomMap = image.convertToFormat(QImage::Format_Indexed8, Palette16::get(), Qt::ThresholdDither);
+	value = roomMap.height()*2;
+
+#if 1
 	WorkerThread::i = 0;
 	WorkerThread::canceled = false;
 	connect(progress, &QProgressDialog::canceled, this, [this](){ WorkerThread::canceled = true; });
@@ -164,16 +189,91 @@ void MainWindow::actionImportRooms(bool type)
 
 	ui->actionImportRooms->setEnabled(false);
 
-	for(int i = 0; i < 3; ++i)
+	for(int i = 0; i < 1; ++i)
 	{
-		WorkerThread *workerThread = new WorkerThread(*this, *room_map, type);
+		WorkerThread *workerThread = new WorkerThread(*this, roomMap, type);
 		connect(workerThread, &WorkerThread::taking_item, progress, &QProgressDialog::setValue);
 		connect(workerThread, &WorkerThread::finished, workerThread, &WorkerThread::deleteLater);
-		connect(workerThread, &WorkerThread::work_finished, this, [this](){ui->actionImportRooms->setEnabled(true); delete progress; delete room_map; });
+		connect(workerThread, &WorkerThread::work_finished, this, [this](){ui->actionImportRooms->setEnabled(true); delete progress; mergeRoomMaps(); });
 		workerThread->start();
 	}
 
 	ui->actionExport_Parallax_Layer->setEnabled(false);
+#else
+	xLines.clear();
+	xLines.reserve(roomMap.width());
+
+	for(int y = 0; y < roomMap.height(); ++y)
+	{
+		xLines.push_back(RunList_t());
+
+		for(int x = 0; x < roomMap.width(); )
+		{
+			xLines.back().push_back(Run_t(roomMap.pixelIndex(x, y), x));
+
+			do { ++x; } while(x < roomMap.width() && roomMap.pixelIndex(x, y) == xLines.back().back().first);
+
+			xLines.back().back().second = x - xLines.back().back().second;
+		}
+
+		if(++value % convertor == 0)
+		{
+			progress->setValue(value);
+			qApp->processEvents();
+		}
+	}
+
+	yLines.clear();
+	yLines.reserve(roomMap.height());
+
+	for(int x = 0; x < roomMap.width(); ++x)
+	{
+		yLines.push_back(RunList_t());
+
+		for(int y = 0; y < roomMap.height(); )
+		{
+			yLines.back().push_back(Run_t(roomMap.pixelIndex(x, y), y));
+
+			do { ++y; } while(y < roomMap.height() && roomMap.pixelIndex(x, y) == yLines.back().back().first);
+
+			yLines.back().back().second = y - yLines.back().back().second;
+		}
+
+		if(++value % convertor == 0)
+		{
+			progress->setValue(value);
+			qApp->processEvents();
+		}
+	}
+
+	delete progress;
+#endif
+}
+
+void MainWindow::mergeRoomMaps()
+{
+	if(summedRoomMap.isNull())
+	{
+		summedRoomMap = std::move(roomMap);
+		return;
+	}
+
+	QProgressDialog(tr("Merging Room Maps..."), 0L, 0L, roomMap.height(), this);
+
+	for(int y = 0; y < roomMap.height(); ++y)
+	{
+		for(int x = 0; x < roomMap.width(); ++x)
+		{
+			if(summedRoomMap.pixel(x, y) == 0)
+			{
+				summedRoomMap.setPixel(x, y, roomMap.pixel(x, y));
+				continue;
+			}
+		}
+
+		progress->setValue(y);
+		qApp->processEvents();
+	}
 }
 
 QRgb readColor(FILE * file, int index)
@@ -478,3 +578,4 @@ bool MainWindow::openKreaturesFile(std::string name, int read_length)
 
 	return true;
 }
+

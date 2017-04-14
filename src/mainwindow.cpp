@@ -13,8 +13,14 @@
 #include <QStandardPaths>
 #include <QImageWriter>
 #include <QProgressDialog>
+#include <QCursor>
 #include "roomsfromimage.h"
 #include <memory>
+#include "airfromrooms.h"
+#include "airfromroomsnp.h"
+#include "linkrooms.h"
+#include "joinroomsvertically.h"
+
 
 QVector<QRgb> MainWindow::palette332;
 
@@ -56,6 +62,10 @@ top_right(0),
 bottom_left(0),
 bottom_right(0),
 mouse_down(true),
+newEdge(QKeySequence("n"), this),
+extrudeEdge(QKeySequence("e"), this),
+grabMode(QKeySequence("g"), this),
+escape(Qt::Key_Escape, this),
 dimensions(-1, -1),
 zoom(1.0),
 autosaveTimer(this),
@@ -100,6 +110,63 @@ ui(new Ui::MainWindow)
 	connect(ui->actionDelete, &QAction::triggered, this, &MainWindow::editDelete);
 
 	connect(ui->actionRemove_Hidden_Pixels, &QAction::triggered, [this]() { removeHidden(); });
+
+	connect(ui->actionCalculate_CA_Field, &QAction::triggered, [this]()
+	{
+		LinkRooms::interConnectRooms(rooms);
+		std::vector< std::list<Room> > caField = AirFromRooms::initialPass(rooms);
+
+		int height = dimensions.height() % 256;
+		int width = dimensions.width() % 256;
+
+		int y = tiles().height()-1;
+		for(int x = 0; x < tiles().width(); ++x)
+		{
+			int i = x*tiles().height() + y;
+
+			for(auto j = caField[i].begin(), k = std::next(j); j != caField[i].end(); j = k++)
+			{
+				if(j->bottom_left > height)
+				{
+					j->bottom_left = height;
+				}
+				if(j->bottom_right > height)
+				{
+					j->bottom_right = height;
+				}
+
+				if(height - j->top_left < 4
+				&& height - j->top_right < 4)
+				{
+					caField[i].erase(j);
+				}
+			}
+		}
+
+		for(int y = 0; y < tiles().height(); ++y)
+		{
+			int i = (tiles().width()-1)*tiles().height() + y;
+
+			for(auto j = caField[i].begin(), k = std::next(j); j != caField[i].end(); j = k++)
+			{
+				if(j->right > width)
+				{
+					j->right = width;
+				}
+
+				if(width - j->left  < 4)
+				{
+					caField[i].erase(j);
+				}
+			}
+		}
+
+		JoinRoomsVertically::linkShafts(caField, tiles());
+		CaField = JoinRoomsVertically::toWorldSpace(caField, tiles());
+		JoinRoomsVertically::joinPairs(CaField);
+//		JoinRoomsVertically::joinPairs(CaField);
+	//	AirFromRoomsNP::processTiles(CaField);
+	});
 
 	connect(ui->actionShow_Background, &QAction::triggered, [this]() { ui->widget->repaint(); });
 	connect(ui->actionShow_Foreground, &QAction::triggered, [this]() { ui->widget->repaint(); });
@@ -146,6 +213,10 @@ ui(new Ui::MainWindow)
 
 	connect(ui->horizontalScrollBar, &QScrollBar::valueChanged, [this](int) { ui->widget->repaint(); });
 	connect(ui->verticalScrollBar, &QScrollBar::valueChanged, [this](int) { ui->widget->repaint(); });
+
+	connect(&newEdge, &QShortcut::activated, [this]() { roomMesh.addQuad(getMousePosition()); ui->widget->repaint(); } );
+//	connect(&grabMode, &QShortcut::activated, [this]() { roomMesh.grab(getMousePosition()); } );
+	connect(&escape, &QShortcut::activated, [this]() { roomMesh.escape(); ui->widget->repaint(); } );
 
 	setGeometry(
 	    QStyle::alignedRect(
@@ -237,11 +308,12 @@ void MainWindow::meld()
 
 void MainWindow::documentClose() {}
 
-bool MainWindow::dimensionCheck(QSize dimension1)
+bool MainWindow::dimensionCheck(QSize dimension1, bool room_map)
 {
 	if(dimensions != QSize(-1, -1))
 	{
-		if(dimensions != dimension1)
+		if((!room_map && dimensions != dimension1)
+		|| ( room_map && dimensions != dimension1*2))
 		{
 			/*
 			for(int i = 0; i < 3; ++i)
@@ -329,21 +401,27 @@ void MainWindow::editDelete()
 
 void MainWindow::onMousePress(QPoint pos, QSize size)
 {
-	size /= zoom;
-	pos  /= zoom;
+	roomMesh.onMousePress(roomOutline, getMousePosition(pos, size), dimensions);
+}
 
-	QSize s0 = dimensions - size;
 
-	pos += QPoint(ui->horizontalScrollBar->value() * s0.width() / 255,
-				  ui->verticalScrollBar->value() * s0.height() / 255);
+QPoint MainWindow::getMousePosition(QPoint pos, QSize size)
+{
+	pos /= zoom;
+	size = dimensions - size / zoom;
 
+	pos += QPoint((ui->horizontalScrollBar->value() * size.width()) >> 8,
+				  (ui->verticalScrollBar->value()   * size.height()) >> 8);
 
 	pos.setX(std::max(0, std::min(pos.x(), dimensions.width())));
 	pos.setY(std::max(0, std::min(pos.y(), dimensions.height())));
 
-	last_pos = pos;
+	return pos;
+}
 
-	mouse_down = true;
+QPoint MainWindow::getMousePosition()
+{
+	return getMousePosition(mapFromGlobal(QCursor::pos()), ui->widget->size());
 }
 
 bool MainWindow::cropRoom(Room & room, int left, int right, int top_left, int top_right, int bottom_left, int bottom_right)
@@ -557,6 +635,21 @@ void MainWindow::onDoubleClick(QPoint pos, QSize size)
 
 void MainWindow::onMouseMoveEvent(QPoint pos, QSize size)
 {
+	if(roomMesh.state == 'n')
+	{
+		roomMesh.defineQuad(yLines, getMousePosition(pos, size), dimensions);
+		ui->widget->repaint();
+
+	}
+#if 0
+	if(state == 'g')
+	{
+		pos = getMousePosition(pos, size);
+		roomMesh.moveVerticies(roomOutline, pos/zoom, size/zoom, (pos-last_pos)/zoom);
+		ui->widget->repaint();
+	}
+
+
 	size /= zoom;
 	pos  /= zoom;
 
@@ -601,6 +694,7 @@ void MainWindow::onMouseMoveEvent(QPoint pos, QSize size)
 	{
 		ui->widget->repaint();
 	}
+#endif
 }
 
 QString MainWindow::getToolTip(QPoint pos, QSize size)
@@ -666,6 +760,71 @@ void MainWindow::removeHidden()
 
 }
 
+void MainWindow::drawRooms(const std::vector< std::list<Room> > & rooms, QPainter & painter, QPoint offset, QSize size, Qt::PenStyle line_type)
+{
+	for(uint16_t i = 0; i < rooms.size(); ++i)
+	{
+		int x = i / tiles().height() * 256;
+		int y = i % tiles().height() * 256;
+
+		if(x + 256 < offset.x() || y + 256 < offset.y()
+		|| x > offset.x() + size.width() || y > offset.y() + size.height())
+		{
+			continue;
+		}
+
+		QPoint points[4];
+#if 1
+		QPoint pos(x, y);
+		pos -= offset;
+#else
+		QPoint pos(-offset);
+
+#endif
+		for(auto j = rooms[i].begin(); j != rooms[i].end(); ++j)
+		{
+			if(j->room_type)
+			{
+				painter.setPen(QPen(QBrush(palette[j->room_type-1]), 1, line_type));
+			}
+			else
+			{
+				painter.setPen(QPen(Qt::cyan, 2, line_type));
+			}
+
+			points[0] = pos + QPoint(j->left, j->top_left);
+			points[1] = pos + QPoint(j->left, j->bottom_left);
+			points[2] = pos + QPoint(j->right, j->bottom_right);
+			points[3] = pos + QPoint(j->right, j->top_right);
+			painter.drawPolygon(points, 4);
+		}
+	}
+}
+
+void MainWindow::drawRooms(const std::list<Room> & rooms, QPainter & painter, QPoint offset, QSize size, Qt::PenStyle line_type)
+{
+	QPoint pos(-offset);
+	QPoint points[4];
+
+	for(auto j = rooms.begin(); j != rooms.end(); ++j)
+	{
+		if(j->room_type)
+		{
+			painter.setPen(QPen(QBrush(palette[j->room_type-1]), 1, line_type));
+		}
+		else
+		{
+			painter.setPen(QPen(Qt::cyan, 2, line_type));
+		}
+
+		points[0] = pos + QPoint(j->left, j->top_left);
+		points[1] = pos + QPoint(j->left, j->bottom_left);
+		points[2] = pos + QPoint(j->right, j->bottom_right);
+		points[3] = pos + QPoint(j->right, j->top_right);
+		painter.drawPolygon(points, 4);
+	}
+}
+
 void MainWindow::draw(QPainter & painter, QPoint pos, QSize size)
 {
 	if(dimensions.width() < 0)
@@ -689,7 +848,7 @@ void MainWindow::draw(QPainter & painter, QPoint pos, QSize size)
 
 	pos -= offset;
 
-	QPoint prev_pos = (last_pos - offset)/zoom;
+// QPoint prev_pos = (last_pos - offset)/zoom;
 
 	for(int i = 0; i < 3; ++i)
 	{
@@ -706,85 +865,16 @@ void MainWindow::draw(QPainter & painter, QPoint pos, QSize size)
 		painter.drawImage(0, 0, background[i][showMapping()], offset.x(), offset.y(), size.width(), size.height());
 	}
 
+	roomOutline.draw(painter, offset, pos, size);
+	roomMesh.draw(painter, offset, 1.0, pos, size);
+
 	painter.setPen(QPen(Qt::cyan, 1, Qt::SolidLine, Qt::FlatCap, Qt::MiterJoin));
 
-	for(uint16_t i = 0; i < rooms.size(); ++i)
-	{
-		int x = i / tiles().height() * 256;
-		int y = i % tiles().height() * 256;
+	drawRooms(rooms  , painter, offset, size, Qt::SolidLine);
+	drawRooms(fluids , painter, offset, size, Qt::DashLine);
+	drawRooms(CaField, painter, offset, size, Qt::DashDotLine);
 
-		if(x + 256 < offset.x() || y + 256 < offset.y()
-		|| x > offset.x() + size.width() || y > offset.y() + size.height())
-		{
-			continue;
-		}
-
-		QPoint points[4];
-		QPoint pos(x, y);
-		pos -= offset;
-
-		for(auto j = rooms[i].begin(); j != rooms[i].end(); ++j)
-		{
-			if(ui->actionSelect->isChecked())
-			{
-				for(auto k = selectedRooms.begin(); k != selectedRooms.end(); ++k)
-				{
-					if(k->first == i && k->second == &(*j))
-					{
-						painter.setBrush(QBrush(Qt::white, Qt::DiagCrossPattern));
-						break;
-					}
-				}
-			}
-
-			if(j->room_type)
-			{
-				painter.setPen(palette[j->room_type-1]);
-			}
-
-			points[0] = pos + QPoint(j->left, j->top_left);
-			points[1] = pos + QPoint(j->left, j->bottom_left);
-			points[2] = pos + QPoint(j->right, j->bottom_right);
-			points[3] = pos + QPoint(j->right, j->top_right);
-			painter.drawPolygon(points, 4);
-
-			if(ui->actionSelect->isChecked())
-			{
-				painter.setBrush(QBrush(Qt::white, Qt::NoBrush));
-			}
-		}
-	}
-
-	for(uint16_t i = 0; i < fluids.size(); ++i)
-	{
-		int x = i / tiles().height() * 256;
-		int y = i % tiles().height() * 256;
-
-		if(x + 256 < offset.x() || y + 256 < offset.y()
-		|| x > offset.x() + size.width() || y > offset.y() + size.height())
-		{
-			continue;
-		}
-
-		QPoint points[4];
-		QPoint pos(x, y);
-		pos -= offset;
-
-		for(auto j = fluids[i].begin(); j != fluids[i].end(); ++j)
-		{
-			if(j->room_type)
-			{
-				painter.setPen(QPen(QBrush(palette[j->room_type-1]), 1, Qt::DashLine));
-			}
-
-			points[0] = pos + QPoint(j->left, j->top_left);
-			points[1] = pos + QPoint(j->left, j->bottom_left);
-			points[2] = pos + QPoint(j->right, j->bottom_right);
-			points[3] = pos + QPoint(j->right, j->top_right);
-			painter.drawPolygon(points, 4);
-		}
-	}
-
+/*
 	if(state != 0 && ui->actionAdd->isChecked())
 	{
 		QPoint points[4];
@@ -824,6 +914,7 @@ void MainWindow::draw(QPainter & painter, QPoint pos, QSize size)
 		points[3] = QPoint(pos.x(), prev_pos.y());
 		painter.drawPolygon(points, 4);
 	}
+	//*/
 }
 
 QMenu * MainWindow::showContextMenu(ViewWidget * widget, QPoint pos, QSize size)

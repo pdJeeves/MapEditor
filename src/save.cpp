@@ -476,6 +476,24 @@ const static int header_offset = 8;
 	fclose(file);
 }
 
+void MainWindow::saveRooms(FILE * file, std::list<Room> & rooms)
+{
+	uint16_t length = rooms.size();
+	fwrite(&length, 2, 1, file);
+
+	for(auto j = rooms.begin(); j != rooms.end(); ++j)
+	{
+		fwrite(&(j->left)        , sizeof(j->left)        , 1, file);
+		fwrite(&(j->right)       , sizeof(j->right)       , 1, file);
+		fwrite(&(j->top_left)    , sizeof(j->top_left)    , 1, file);
+		fwrite(&(j->top_right)   , sizeof(j->top_right)   , 1, file);
+		fwrite(&(j->bottom_left) , sizeof(j->bottom_left) , 1, file);
+		fwrite(&(j->bottom_right), sizeof(j->bottom_right), 1, file);
+		fwrite(&(j->room_type)   , sizeof(j->room_type)   , 1, file);
+	}
+}
+
+
 void MainWindow::documentSave()
 {
 	if(filepath.isEmpty())

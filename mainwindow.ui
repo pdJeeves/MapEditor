@@ -107,6 +107,7 @@
     <addaction name="actionPaste"/>
     <addaction name="actionDelete"/>
     <addaction name="separator"/>
+    <addaction name="actionCalculate_CA_Field"/>
     <addaction name="actionRemove_Hidden_Pixels"/>
    </widget>
    <widget class="QMenu" name="menuReplace">
@@ -628,6 +629,11 @@
    </property>
    <property name="text">
     <string>Show Reflectivity Map</string>
+   </property>
+  </action>
+  <action name="actionCalculate_CA_Field">
+   <property name="text">
+    <string>Calculate CA Field</string>
    </property>
   </action>
  </widget>

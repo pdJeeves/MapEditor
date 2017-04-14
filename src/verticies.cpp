@@ -6,6 +6,7 @@
 #define PURE
 #endif
 
+
 static
 double PURE getError(const uint16_t * heights, int min, int max)
 {
@@ -13,21 +14,19 @@ double PURE getError(const uint16_t * heights, int min, int max)
 	double b = heights[min] - m * min;
 	double error = 0;
 
-	bool r = heights[max] == heights[min] && (heights[max] == 255 || heights[max] == 0);
-
 	for(int x = min; x <= max; ++x)
 	{
 		auto err = fabs(m*x + b - heights[x]);
 
-		if(r && heights[x] != heights[max])
+		if(heights[x] == 0  || heights[x] == MAX_HEIGHT)
 		{
-			err = 256;
+			err *= PixelsPerTile;
 		}
 
 		error += err*err;
 	}
 
-	return error + (256 - (max - min));
+	return error + (PixelsPerTile - (max - min));
 }
 
 static
@@ -42,7 +41,7 @@ double PURE getArea(const uint16_t * above, uint16_t * below, int min, int max)
 			((max * m2/2 + b2)*max - (min * m2/2 + b2)*min);
 }
 
-MemoData::MemoData(Verticies & verts, int begin, int end)
+MemoData::MemoData(Verticies & verts, int begin, int end, bool error_type)
 	: verts(verts)
 {
 	left = 0L;
@@ -55,12 +54,22 @@ MemoData::MemoData(Verticies & verts, int begin, int end)
 
 double MemoData::error(int depth) const
 {
-	if(left && depth)
+	if(left && right && depth)
 	{
 		return left->error(depth-1) + right->error(depth-1);
 	}
-
-	return _error;
+	else if(left && !right)
+	{
+		return left->error(depth) + verts.missing(left->max+1, max);
+	}
+	else if(!left && right)
+	{
+		return verts.missing(min, right->min-1) + right->error(depth);
+	}
+	else
+	{
+		return _error;
+	}
 }
 
 double MemoData::area(int depth) const
@@ -69,25 +78,54 @@ double MemoData::area(int depth) const
 	{
 		return left->area(depth-1) + right->area(depth-1);
 	}
-
-	return getArea(verts.above, verts.below, min, max);
+	else if(left && !right)
+	{
+		return left->area(depth);
+	}
+	else if(right && !left)
+	{
+		return right->area(depth);
+	}
+	else
+	{
+		return getArea(verts.above, verts.below, min, max);
+	}
 }
 
 int MemoData::cost(int depth) const
 {
-	if(left && depth)
+	if(left && right && depth)
 	{
 		return left->cost(depth-1) + right->cost(depth-1) + 1;
 	}
-	return 1;
+	else if(left && !right)
+	{
+		return left->cost(depth);
+	}
+	else if(!left && right)
+	{
+		return right->cost(depth);
+	}
+	else
+	{
+		return 1;
+	}
 }
 
 void MemoData::getIndicies(int depth) const
 {
-	if(left && depth)
+	if(left && right && depth)
 	{
 		left->getIndicies(depth -1);
 		right->getIndicies(depth-1);
+	}
+	else if(left && !right)
+	{
+		left->getIndicies(depth);
+	}
+	else if(!left && right)
+	{
+		right->getIndicies(depth);
 	}
 	else
 	{
@@ -96,9 +134,10 @@ void MemoData::getIndicies(int depth) const
 	}
 }
 
-Verticies::Verticies(const QImage & image, int x, int y0, int y1)
+Verticies::Verticies(uint16_t color, uint16_t color2, int x, int y0, int y1)
 	: image(image),
-	color(image.pixelIndex(x, y0)),
+	color(color),
+	color2(color2),
 	begin(x),
 	end(x)
 {
@@ -112,7 +151,7 @@ void Verticies::push_back(int x, int y)
 	above[x] = y;
 	end = x;
 
-	for(below[x] = y; below[x] < 256; ++below[x])
+	for(below[x] = y; below[x] < PixelsPerTile; ++below[x])
 	{
 		if(image.pixelIndex(x, below[x]) != color)
 		{
@@ -128,7 +167,7 @@ void Verticies::push_back(int x, int y0, int y1)
 	end = x;
 }
 
-MemoData * Verticies::OptimizeLine(std::map<int, MemoData*> & memo, const int min, const int max, const int depth)
+MemoData * Verticies::OptimizeLine(std::map<int, MemoData*> & memo, const int min, const int max, const int depth, const bool error_type, const bool at_begin, bool at_end)
 {
 	int key = min << 16 | max;
 	auto index = memo.find(key);
@@ -138,8 +177,8 @@ MemoData * Verticies::OptimizeLine(std::map<int, MemoData*> & memo, const int mi
 		return index->second;
 	}
 
-	auto data = new MemoData(*this, min, max);
-	memo.insert(std::pair<int, MemoData*>(key, data));
+	auto data = new MemoData(*this, min, max, error_type);
+	memo.insert(std::make_pair(key, data));
 
 	if(data->error(depth) < 8 || depth == 0)
 	{
@@ -148,7 +187,7 @@ MemoData * Verticies::OptimizeLine(std::map<int, MemoData*> & memo, const int mi
 
 	double self_error = data->error(depth) / 2;
 	int self_cost = data->cost(depth);
-	int self_distance = 65536;
+	int self_distance = PixelsPerTile*PixelsPerTile;
 
 	for(int x = min + 2; x < max; ++x)
 	{
@@ -157,34 +196,70 @@ MemoData * Verticies::OptimizeLine(std::map<int, MemoData*> & memo, const int mi
 			{
 				break;
 			}
-
-			if(above[x] == above[x+1]
-			&& above[x] == above[x-1]
-			&& below[x] == below[x+1]
-			&& below[x] == below[x-1])
+#if 1
+			if(above[x-1] == above[x+1]
+			&& below[x-1] == below[x+1])
 			{
 				continue;
 			}
+#endif
 
 			break;
 		} while(++x < max);
 
-		auto l = OptimizeLine(memo, min, x-1, depth - 1);
-		auto r = OptimizeLine(memo, x, max, depth - 1);
-		double split_error = l->error(depth) + r->error(depth);
-		int    split_cost  = l->cost(depth) + r->cost(depth);
+		auto l = OptimizeLine(memo, min, x-1, depth - 1, error_type, at_begin, false);
+		auto r = OptimizeLine(memo, x, max, depth - 1, error_type, false, at_end);
+		const double l_error     = l->error(depth);
+		const double r_error     = r->error(depth);
+		double split_error = l_error + r_error;
+
+		const int l_cost = l->cost(depth);
+		const int r_cost = r->cost(depth);
+
 		int	   split_distance = abs((max - x) - (x - min));
 
 		if(split_error < self_error
-		|| (split_error == self_error
-		&& split_distance < self_distance))
+		|| (split_error == self_error && split_distance < self_distance))
 		{
 			self_error = split_error;
 			self_distance = split_distance;
-			self_cost  = split_cost;
+			self_cost  = l_cost + r_cost;
 
 			data->left = l;
 			data->right = r;
+		}
+
+		if(at_begin && !at_end)
+		{
+			const double l_missing = missing(min, x-1);
+			split_error = l_missing + r_error;
+
+			if(split_error < self_error
+			|| split_error == self_error && split_distance > self_distance)
+			{
+				self_error = split_error;
+				self_distance = split_distance;
+				self_cost  = r_cost;
+
+				data->left = 0L;
+				data->right = r;
+			}
+		}
+		else if(at_end && !at_begin)
+		{
+			const double r_missing = missing(x, max);
+			split_error = l_error + r_missing;
+
+			if(split_error < self_error
+			|| split_error == self_error && split_distance > self_distance)
+			{
+				self_error = split_error;
+				self_distance = split_distance;
+				self_cost  = l_cost;
+
+				data->left = l;
+				data->right = 0L;
+			}
 		}
 	}
 
@@ -248,7 +323,7 @@ void Verticies::smooth()
 	::smooth(below, begin, end);
 }
 
-void Verticies::optimize(int depth)
+void Verticies::optimize(int depth, const bool error_type)
 {
 	smooth();
 
@@ -258,7 +333,55 @@ void Verticies::optimize(int depth)
 	}
 
 	std::map<int, MemoData*> map;
-	auto opt = OptimizeLine(map, begin, end, depth);
+	MemoData * opt = 0L;
+
+	if(optimal.empty())
+	{
+		opt = OptimizeLine(map, begin, end, depth, error_type, true, true);
+	}
+	else
+	{
+		std::list<MemoData*> list;
+
+		if(optimal.front() != begin)
+		{
+			list.push_back(OptimizeLine(map, begin, optimal.front(), depth, error_type, begin != 0, false));
+		}
+
+		for(size_t i = 1; i < optimal.size(); ++i)
+		{
+			list.push_back(OptimizeLine(map, optimal[i-1], optimal[i], depth, error_type, false, false));
+		}
+
+		if(optimal.back() != end)
+		{
+			list.push_back(OptimizeLine(map, optimal.back(), end, depth, error_type, false, end != 255));
+		}
+
+		optimal.clear();
+
+		while(list.size() > 1)
+		{
+			for(auto i = list.begin(); i != list.end(); ++i)
+			{
+				auto j = std::next(i);
+
+				if(j != list.end())
+				{
+					auto data = new MemoData(*this, (*i)->min, (*j)->max,error_type);
+					map.insert(std::make_pair(((*i)->min << 16) | (*j)->max, data));
+
+					data->left = *i;
+					data->right = *j;
+
+					*i = data;
+					list.erase(j);
+				}
+			}
+		}
+
+		opt = list.front();
+	}
 
 	opt->getIndicies(depth);
 
@@ -296,6 +419,25 @@ int Verticies::getEndingPoint(int x) const
 	}
 
 	return optimal.size()-1;
+}
+
+double Verticies::missing(int min, int max) const
+{
+	double error = 0;
+
+	for(int x = min; x <= max; ++x)
+	{
+		auto err = below[x] - above[x];
+
+		if(above[x] == 0  || below[x] == MAX_HEIGHT)
+		{
+			err = PixelsPerTile;
+		}
+
+		error += err;
+	}
+
+	return error + (PixelsPerTile - (max - min));
 }
 
 int Verticies::getHeight(int x) const

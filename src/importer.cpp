@@ -286,7 +286,7 @@ const static uint8_t PALETTE_DTA[] = {
 
 void MainWindow::documentImportSpr()
 {
-	if(!dimensionCheck(QSize((58*144)*2, (8*150)*2)))
+	if(!dimensionCheck(QSize((58*144), (8*150))))
 	{
 		return;
 	}
@@ -304,7 +304,7 @@ void MainWindow::documentImportSpr()
 	if(dimensions == QSize(-1, -1))
 	{
 		filename = QFileInfo(name).fileName();
-		dimensions = QSize((58*144)*2, (8*150)*2);
+		dimensions = QSize((58*144), (8*150));
 		fluids.clear();
 		fluids.resize(totalTiles());
 	}
